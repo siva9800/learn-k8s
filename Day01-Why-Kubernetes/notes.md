@@ -157,16 +157,6 @@ Think of a **restaurant**:
 | **kubectl** | The command-line tool to talk to Kubernetes |
 | **YAML** | The file format used to tell K8s what to do |
 
----
-
-## Practice / Homework
-
-1. Watch: "Kubernetes in 5 minutes" on YouTube
-2. Answer these questions:
-   - Why are containers better than VMs?
-   - Why is Docker alone not enough for production?
-   - What does "self-healing" mean in Kubernetes?
-   - Name 3 problems Kubernetes solves.
 
 ---
 

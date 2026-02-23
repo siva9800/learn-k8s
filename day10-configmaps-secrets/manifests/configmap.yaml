@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: db-config
+data:
+  DB_URL: "postgres-service.database.svc.cluster.local"
+  DB_PORT: "54343532"
+  DB_NAME: "siva_production"

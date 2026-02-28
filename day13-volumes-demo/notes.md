@@ -4,7 +4,8 @@
 
 In this hands-on session, we'll work through practical volume demos on **Minikube** using emptyDir, hostPath, and local PV/PVC. These are great for learning but **not for production**.
 
-> **For production storage:** See [AWS Volumes (EBS/EFS)](../day12-volumes/aws-volumes/notes.md) | [NFS Volumes (On-Prem)](../day12-volumes/nfs-volumes/notes.md)
+> **For production demos on EKS:** See [Volumes Demo (EKS / Production)](eks-demo.md)
+> **For production theory:** See [AWS Volumes (EBS/EFS)](../day12-volumes/aws-volumes/notes.md) | [NFS Volumes (On-Prem)](../day12-volumes/nfs-volumes/notes.md)
 
 ---
 

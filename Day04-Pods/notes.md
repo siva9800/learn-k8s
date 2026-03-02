@@ -282,5 +282,5 @@ spec:
 
 ---
 
-**Previous:** [← Day 03 - Setup](../Day03-Setup/notes.md)
-**Next:** [Day 05 - ReplicaSets →](../Day05-ReplicaSets/notes.md)
+**Previous:** [← Day 03 - Setup](../day03-setup/notes.md)
+**Next:** [Day 05 - ReplicaSets →](../day05-replicasets/notes.md)

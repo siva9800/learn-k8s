@@ -317,5 +317,5 @@ kubectl delete deployment web-deploy
 
 ---
 
-**Previous:** [← Day 05 - ReplicaSets](../Day05-ReplicaSets/notes.md)
-**Next:** [Day 07 - Services & Networking →](../Day07-Services/notes.md)
+**Previous:** [← Day 05 - ReplicaSets](../day05-replicasets/notes.md)
+**Next:** [Day 07 - Services & Networking →](../day07-services/notes.md)

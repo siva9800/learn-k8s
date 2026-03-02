@@ -1,6 +1,6 @@
-# Day 08 - Services Demo (Hands-On Lab)
+                                # Day 08 - Services Demo (Hands-On Lab)
 
-> **Pre-requisite:** Make sure you've read [Day 07 - Services Theory](../Day07-Services/notes.md)
+> **Pre-requisite:** Make sure you've read [Day 07 - Services Theory](../day07-services/notes.md)
 
 In this demo, we'll create all 5 types of Kubernetes Services and test each one step by step.
 
@@ -353,7 +353,7 @@ kubectl run test-dns --image=busybox --rm -it --restart=Never -- nslookup web-he
 
 - **StatefulSets** (databases) - need to connect to a SPECIFIC pod
 - **Service discovery** - when your app needs to know about ALL pods
-- We'll use this in the [StatefulSets Demo (Day 19)](../Day19-StatefulSets-Demo/notes.md)
+- We'll use this in the [StatefulSets Demo (Day 20)](../day20-statefulsets-demo/notes.md)
 
 ### Cleanup
 
@@ -471,5 +471,5 @@ kubectl delete namespace other-team
 
 ---
 
-**Previous:** [← Day 07 - Services (Theory)](../Day07-Services/notes.md)
-**Next:** [Day 09 - Namespaces →](../Day09-Namespaces/notes.md)
+**Previous:** [← Day 07 - Services (Theory)](../day07-services/notes.md)
+**Next:** [Day 09 - Namespaces →](../day09-namespaces/notes.md)

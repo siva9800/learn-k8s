@@ -229,5 +229,5 @@ kubectl delete pod <pod-name>       # Delete a pod
 
 ---
 
-**Previous:** [← Day 02 - Architecture](../Day02-Architecture/notes.md)
-**Next:** [Day 04 - Pods →](../Day04-Pods/notes.md)
+**Previous:** [← Day 02 - Architecture](../day02-architecture/notes.md)
+**Next:** [Day 04 - Pods →](../day04-pods/notes.md)

@@ -262,5 +262,5 @@ kubectl describe namespace dev
 
 ---
 
-**Previous:** [← Day 08 - Services Demo](../Day08-Services-Demo/notes.md)
-**Next:** [Day 10 - ConfigMaps & Secrets →](../Day10-ConfigMaps-Secrets/notes.md)
+**Previous:** [← Day 08 - Services Demo](../day08-services-demo/notes.md)
+**Next:** [Day 10 - ConfigMaps & Secrets →](../day10-configmaps-secrets/notes.md)

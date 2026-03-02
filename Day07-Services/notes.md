@@ -344,5 +344,5 @@ kubectl delete svc backend
 
 ---
 
-**Previous:** [← Day 06 - Deployments](../Day06-Deployments/notes.md)
-**Next:** [Day 08 - Services Demo →](../Day08-Services-Demo/notes.md)
+**Previous:** [← Day 06 - Deployments](../day06-deployments/notes.md)
+**Next:** [Day 08 - Services Demo →](../day08-services-demo/notes.md)

@@ -411,11 +411,23 @@ kubectl get nodes
 5. **Managed Node Groups** = recommended (AWS handles patching/upgrades)
 6. **Fargate** = serverless option (no nodes to manage)
 7. **Always delete your cluster** when not in use to avoid charges!
-8. Use **Cluster Autoscaler** for automatic scaling in production
+
+> **Deep Dive:** [Managed Node Groups](managed-nodegroups/notes.md)
+> **Autoscaling on EKS:** [Day 20 - Autoscaling](../day20-autoscaling/notes.md)
 
 ---
 
+## Practice / Homework
 
+1. Install `eksctl` and `aws cli`
+2. Create a simple EKS cluster with 2 nodes
+3. Deploy nginx and expose with LoadBalancer
+4. Access your app via the AWS Load Balancer URL
+5. Scale the node group to 3 nodes
+6. **DELETE the cluster** when done (save money!)
+7. Compare: same `kubectl` commands work on both Minikube and EKS
+
+---
 
 **Previous:** [← Day 10 - ConfigMaps & Secrets](../day10-configmaps-secrets/notes.md)
 **Next:** [Day 12 - Volumes & Persistent Storage →](../day12-volumes/notes.md)

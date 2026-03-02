@@ -822,4 +822,4 @@ minikube ssh -- sudo rm -rf /tmp/local-pv-data
 ---
 
 **Previous:** [← Day 12 - Volumes (Theory)](../day12-volumes/notes.md)
-**Next:** [Day 14 - Ingress →](../day14-ingress/notes.md)
+**Next:** [Day 14 - StatefulSets →](../day14-statefulsets/notes.md)

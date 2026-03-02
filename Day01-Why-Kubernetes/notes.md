@@ -160,4 +160,4 @@ Think of a **restaurant**:
 
 ---
 
-**Next:** [Day 02 - Kubernetes Architecture →](../Day02-Architecture/notes.md)
+**Next:** [Day 02 - Kubernetes Architecture →](../day02-architecture/notes.md)

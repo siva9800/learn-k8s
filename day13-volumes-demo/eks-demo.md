@@ -1463,4 +1463,4 @@ kubectl delete sc ebs-gp3-fail
 
 **Related:** [Volumes Theory](../day12-volumes/notes.md) | [AWS Volumes Theory (EBS & EFS)](../day12-volumes/aws-volumes/notes.md) | [Local Demos (Minikube)](notes.md)
 **Previous:** [← Day 12 - Volumes (Theory)](../day12-volumes/notes.md)
-**Next:** [Day 14 - Ingress →](../day14-ingress/notes.md)
+**Next:** [Day 14 - StatefulSets →](../day14-statefulsets/notes.md)

@@ -199,5 +199,5 @@ Step 8: API Server updates etcd with the pod's current status
 
 ---
 
-**Previous:** [← Day 01 - Why Kubernetes?](../Day01-Why-Kubernetes/notes.md)
-**Next:** [Day 03 - Setting Up K8s →](../Day03-Setup/notes.md)
+**Previous:** [← Day 01 - Why Kubernetes?](../day01-why-kubernetes/notes.md)
+**Next:** [Day 03 - Setting Up K8s →](../day03-setup/notes.md)

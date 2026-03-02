@@ -228,5 +228,5 @@ To update, you'd have to manually delete old pods one by one. That's:
 
 ---
 
-**Previous:** [← Day 04 - Pods](../Day04-Pods/notes.md)
-**Next:** [Day 06 - Deployments →](../Day06-Deployments/notes.md)
+**Previous:** [← Day 04 - Pods](../day04-pods/notes.md)
+**Next:** [Day 06 - Deployments →](../day06-deployments/notes.md)

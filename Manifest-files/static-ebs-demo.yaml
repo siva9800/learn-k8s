@@ -1,0 +1,67 @@
+# static-ebs-demo.yaml
+
+# --- PersistentVolume ---
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: static-ebs-pv
+spec:
+  capacity:
+    storage: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  persistentVolumeReclaimPolicy: Retain
+  storageClassName: ""                         
+  csi:
+    driver: ebs.csi.aws.com
+    volumeHandle: vol-0d9a134449a3711ce        
+    fsType: ext4
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.ebs.csi.aws.com/zone
+          operator: In
+          values:
+          - us-east-1b                        
+---
+# --- PersistentVolumeClaim ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: static-ebs-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: ""
+  resources:
+    requests:
+      storage: 10Gi
+  volumeName: static-ebs-pv                   
+---
+# --- Pod ---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: static-ebs-pod
+spec:
+  containers:
+  - name: app
+    image: busybox
+    command: ["sh", "-c"]
+    args:
+    - |
+      echo "=== Previous data ==="
+      cat /data/log.txt 2>/dev/null || echo "(no previous data)"
+      echo ""
+      echo "Written by $(hostname) at $(date)" >> /data/log.txt
+      echo "=== Current data ==="
+      cat /data/log.txt
+      sleep 3600
+    volumeMounts:
+    - name: ebs-vol
+      mountPath: /data
+  volumes:
+  - name: ebs-vol
+    persistentVolumeClaim:
+      claimName: static-ebs-pvc

@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: demo-pv
+spec:
+  capacity:
+    storage: 1Gi                          # ← Total capacity
+  accessModes:
+    - ReadWriteOnce                       # ← Single node read-write
+  persistentVolumeReclaimPolicy: Retain   # ← Keep data after PVC deletion
+  storageClassName: manual                # ← Custom class name
+  hostPath:
+    path: /mnt/demo-data  

@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: dynamic-ebs-pod
+spec:
+  containers:
+  - name: app
+    image: busybox
+    command: ["sh", "-c"]
+    args:
+    - |
+      echo "Dynamic EBS provisioning works!" > /data/test.txt
+      echo "Pod: $(hostname), Date: $(date)" >> /data/test.txt
+      cat /data/test.txt
+      sleep 3600
+    volumeMounts:
+    - name: ebs-vol
+      mountPath: /data
+  volumes:
+  - name: ebs-vol
+    persistentVolumeClaim:
+      claimName: dynamic-ebs-pvc

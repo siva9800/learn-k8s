@@ -1,0 +1,45 @@
+# postgres-statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: pg
+  namespace: database
+spec:
+  serviceName: postgres-headless     
+  replicas: 3
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:16
+        ports:
+        - containerPort: 5432
+          name: postgres
+
+        # Environment variables from Secret
+        envFrom:
+        - secretRef:
+            name: postgres-secret
+
+        # Mount data directory
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+          subPath: pgdata               
+
+  volumeClaimTemplates:
+  - metadata:
+      name: postgres-data
+    spec:
+      accessModes: ["ReadWriteOnce"]
+      storageClassName: ebs-gp3          
+      resources:
+        requests:
+          storage: 20Gi                 
+

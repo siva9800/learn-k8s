@@ -1,0 +1,15 @@
+# postgres-headless-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-headless
+  namespace: database
+  labels:
+    app: postgres
+spec:
+  clusterIP: None             
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    name: postgres

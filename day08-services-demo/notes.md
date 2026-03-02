@@ -353,7 +353,7 @@ kubectl run test-dns --image=busybox --rm -it --restart=Never -- nslookup web-he
 
 - **StatefulSets** (databases) - need to connect to a SPECIFIC pod
 - **Service discovery** - when your app needs to know about ALL pods
-- We'll use this in the [StatefulSets Demo (Day 20)](../day20-statefulsets-demo/notes.md)
+- We'll use this in the [StatefulSets Demo (Day 15)](../day15-statefulsets-demo/notes.md)
 
 ### Cleanup
 

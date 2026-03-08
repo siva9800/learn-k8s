@@ -1,0 +1,37 @@
+# App settings
+appName: my-webapp
+
+# Deployment
+replicaCount: 2
+image:
+  repository: nginx
+  tag: "1.27"
+  pullPolicy: IfNotPresent
+
+# Service
+service:
+  type: ClusterIP
+  port: 80
+
+# ConfigMap - app configuration
+config:
+  appColor: "blue"
+  appMode: "production"
+  logLevel: "info"
+  message: "Hello from Helm!"
+
+# Secrets - sensitive data (base64 encoded at render time)
+secrets:
+  dbHost: "postgres-service"
+  dbUser: "admin"
+  dbPassword: "SuperSecret123"
+  dbName: "myappdb"
+
+# Resources
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 100m
+    memory: 128Mi

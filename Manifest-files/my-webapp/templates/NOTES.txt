@@ -1,0 +1,21 @@
+=======================================
+  {{ .Chart.Name }} has been deployed!
+=======================================
+
+Release:    {{ .Release.Name }}
+Namespace:  {{ .Release.Namespace }}
+Replicas:   {{ .Values.replicaCount }}
+App Mode:   {{ .Values.config.appMode }}
+
+To access the app:
+  kubectl port-forward svc/{{ .Release.Name }}-service {{ .Values.service.port }}:{{ .Values.service.port }}
+  Then open: http://localhost:{{ .Values.service.port }}
+
+To check pods:
+  kubectl get pods -l release={{ .Release.Name }}
+
+To see ConfigMap:
+  kubectl get configmap {{ .Release.Name }}-config -o yaml
+
+To see Secret (decoded):
+  kubectl get secret {{ .Release.Name }}-secret -o jsonpath='{.data.DB_PASSWORD}' | base64 -d

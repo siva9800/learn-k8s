@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-config
+  labels:
+    app: {{ .Values.appName }}
+    release: {{ .Release.Name }}
+data:
+  APP_COLOR: {{ .Values.config.appColor | quote }}
+  APP_MODE: {{ .Values.config.appMode | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  index.html: |
+    <html>
+    <body style="background-color: {{ .Values.config.appColor }}; color: white; text-align: center; padding-top: 50px;">
+      <h1>{{ .Values.config.message }}</h1>
+      <p>Release: {{ .Release.Name }}</p>
+      <p>Chart: {{ .Chart.Name }}-{{ .Chart.Version }}</p>
+      <p>App Version: {{ .Chart.AppVersion }}</p>
+      <p>Mode: {{ .Values.config.appMode }}</p>
+    </body>
+    </html>

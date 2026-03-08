@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-deployment
+  labels:
+    app: {{ .Values.appName }}
+    release: {{ .Release.Name }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Values.appName }}
+      release: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app: {{ .Values.appName }}
+        release: {{ .Release.Name }}
+    spec:
+      containers:
+      - name: {{ .Values.appName }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - containerPort: 80
+        # Load ConfigMap as environment variables
+        envFrom:
+        - configMapRef:
+            name: {{ .Release.Name }}-config
+        # Load Secrets as environment variables
+        - secretRef:
+            name: {{ .Release.Name }}-secret
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+        # Mount custom index.html from ConfigMap
+        volumeMounts:
+        - name: html-volume
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: html-volume
+        configMap:
+          name: {{ .Release.Name }}-config
+          items:
+          - key: index.html
+            path: index.html

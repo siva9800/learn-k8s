@@ -1,9 +1,62 @@
 # StatefulSet Demo on EKS - Production-Grade PostgreSQL
 
+> **Goal:** Run a PostgreSQL StatefulSet on real **AWS EKS**, where each pod gets its **own EBS volume** and a stable identity - the realistic pattern for databases on Kubernetes.
+
 > **Pre-requisite:** [Day 14 - StatefulSets Theory](../day14-statefulsets/notes.md) | [Day 15 - StatefulSets Demo (Local)](notes.md)
 >
 > **Cluster requirement:** EKS cluster with EBS CSI driver installed.
 > See [EBS CSI Driver Setup](../day13-volumes-demo/eks-demo.md) for installation steps.
+
+---
+
+## Learning Objectives
+
+By the end you will be able to:
+
+- Deploy PostgreSQL as a StatefulSet with per-pod **EBS** volumes
+- Wire up **two services** (headless + regular) and know when to use each
+- Connect from another pod the way a real **microservice** would
+- Prove **data persistence** across pod and StatefulSet deletion
+- Scale safely and **clean up EBS** to avoid charges
+
+---
+
+## Real-World Analogy
+
+Each "permanent employee" (`pg-0`, `pg-1`, `pg-2`) gets a **personal safe-deposit box at the bank** - a real **AWS EBS volume**. The catch: a box lives in **one bank branch (Availability Zone)**, so the employee must sit in the **same branch as their box**. That's exactly why we use `WaitForFirstConsumer` - it creates each box in the branch where its employee will sit.
+
+The office also has **two phone numbers**:
+
+- **Regular Service (`postgres-service`)** = the **front desk** - call it and you reach *any available* employee (load-balanced reads).
+- **Headless Service (`postgres-headless`)** = each employee's **direct desk line** - `pg-0.postgres-headless` always reaches `pg-0` (e.g. the primary, for writes).
+
+> **Heads-up on "replication":** This demo runs **3 independent PostgreSQL instances**, each with its own EBS volume. It demonstrates *identity + per-pod storage + the two-service pattern* - it does **not** configure streaming replication between them (that needs `primary_conninfo`, a replication user, and an init script, or an operator). The architecture diagrams below show where replication *would* flow in a fully wired setup.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    App[" App / microservice<br/>(order-service)"]
+    App -->|reads, load-balanced| RS[" postgres-service<br/>(ClusterIP)"]
+    App -.writes, direct.-> H0[" pg-0.postgres-headless"]
+    RS --> P0 & P1 & P2
+    H0 --> P0
+    subgraph STS["StatefulSet: pg (replicas 3)"]
+      P0[" pg-0 (primary)"]
+      P1[" pg-1 (replica)"]
+      P2[" pg-2 (replica)"]
+    end
+    P0 --> E0[(" EBS gp3 20Gi<br/>postgres-data-pg-0 · AZ-a")]
+    P1 --> E1[(" EBS gp3 20Gi<br/>postgres-data-pg-1 · AZ-b")]
+    P2 --> E2[(" EBS gp3 20Gi<br/>postgres-data-pg-2 · AZ-c")]
+
+    classDef pod fill:#dbeafe,stroke:#2563eb;
+    classDef aws fill:#fff7ed,stroke:#ea580c;
+    class P0,P1,P2 pod;
+    class E0,E1,E2 aws;
+```
 
 ---
 
@@ -740,10 +793,12 @@ kubectl delete sc ebs-gp3
 |   - 3 replicas (pg-0, pg-1, pg-2)                        |
 |   - Each with its own 20GB EBS gp3 volume                 |
 |   - Encrypted storage with Retain policy                   |
-|   - Health checks (liveness + readiness)                   |
-|   - Resource limits                                        |
-|   - Custom PostgreSQL config via ConfigMap                 |
+|   - subPath (pgdata) for the data directory               |
 |   - Secrets for credentials                                |
+|                                                            |
+| (Hardening you'd add next: liveness/readiness probes,      |
+|  resource requests/limits, ConfigMap tuning, real          |
+|  streaming replication or a Postgres operator.)            |
 |                                                            |
 | Two Services:                                              |
 |   - postgres-service (ClusterIP) for app connections       |
@@ -767,6 +822,8 @@ kubectl delete sc ebs-gp3
 | subPath | pgdata subdirectory | PostgreSQL requires non-root directory |
 | Retain policy | Don't auto-delete EBS | Protect against accidental deletion |
 
+> **Not yet done (next steps to "real" production):** liveness/readiness probes, resource requests & limits, a `ConfigMap` for `postgresql.conf` tuning, and **actual streaming replication** (replication user + `primary_conninfo`, or a Postgres operator like CloudNativePG / Zalando). The 3 pods here are independent instances.
+
 ### Key Takeaways
 
 1. **Two services are needed**: headless (for StatefulSet + direct pod access) and regular (for app connections)
@@ -779,5 +836,50 @@ kubectl delete sc ebs-gp3
 8. **Each replica gets its own EBS** -- 3 replicas = 3 x 20GB = 60GB total storage cost
 
 ---
+
+## Common Mistakes
+
+1. **CSI driver / StorageClass not ready.** Without the **EBS CSI driver + IRSA** and the `ebs-gp3` class, every PVC sits `Pending`. Finish the [Day 13 EKS setup](../day13-volumes-demo/eks-demo.md) first.
+2. **Omitting `subPath: pgdata`.** PostgreSQL refuses to initialise in a volume root that contains `lost+found`. The data dir must be a **subdirectory** of the mount.
+3. **`Immediate` binding across AZs.** EBS is AZ-locked; a volume in the wrong AZ can never attach. Use `volumeBindingMode: WaitForFirstConsumer`.
+4. **Assuming the 3 pods replicate automatically.** They're **independent** instances here. Real replication needs explicit config or an operator - Kubernetes doesn't copy DB data for you.
+5. **Leaving EBS behind on cleanup.** StatefulSet deletion **retains** PVCs, and `Retain` keeps the EBS even after PVC deletion. Verify with `aws ec2 describe-volumes` or you keep paying.
+
+---
+
+## Quick Self-Check
+
+1. Why must the EBS CSI driver and `ebs-gp3` StorageClass exist before this StatefulSet will run?
+2. What PVC names does `volumeClaimTemplates: name: postgres-data` produce for replicas `pg-0..pg-2`?
+3. Which service do your app's **read** queries use, and which address would a **write** go to?
+4. After deleting `pg-0`, why is the previously inserted `orders` data still there?
+5. After `kubectl delete statefulset pg` with `reclaimPolicy: Retain`, what two things must you do to fully stop AWS charges?
+
+<details>
+<summary>Answers</summary>
+
+1. They provide **dynamic provisioning of real EBS volumes**; without them PVCs can't bind and pods stay `Pending`.
+2. `postgres-data-pg-0`, `postgres-data-pg-1`, `postgres-data-pg-2` (pattern `<template>-<statefulset>-<ordinal>`).
+3. **Reads** -> `postgres-service` (regular ClusterIP, load-balanced). **Writes** -> `pg-0.postgres-headless` (direct to the primary via headless DNS).
+4. The recreated `pg-0` keeps the **same identity** and **re-attaches `postgres-data-pg-0`** (its own EBS), so the data persists.
+5. **Delete the PVCs** (`kubectl delete pvc -l app=postgres -n database`) **and** delete the retained **EBS volumes in AWS** (`aws ec2 delete-volume ...`), confirming with `describe-volumes`.
+
+</details>
+
+---
+
+## Summary
+
+- PostgreSQL on EKS uses `volumeClaimTemplates` + the EBS CSI driver to give each pod its **own real EBS volume**.
+- `WaitForFirstConsumer` keeps each EBS in the **same AZ** as its pod.
+- **Two services**: `postgres-service` (reads, load-balanced) and `postgres-headless` (direct/writes/replication).
+- Identity sticks to storage: delete `pg-0`, it returns with `postgres-data-pg-0` and its data intact.
+- Use **Retain** for safety, but then **clean up PVCs and EBS explicitly** to avoid charges.
+
+---
+
+> **Production hardening to explore next:** liveness/readiness probes & resource limits, a Postgres **operator** (CloudNativePG / Zalando), EBS **snapshots/backups**, and multi-AZ HA.
+
+**Next up ->** [Day 16 - Resource Management and Autoscaling](../day16-resource-management-autoscaling/notes.md)
 
 **Previous:** [StatefulSets Demo (Local)](notes.md) | **Theory:** [Day 14 - StatefulSets](../day14-statefulsets/notes.md)

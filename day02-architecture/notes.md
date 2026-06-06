@@ -1,83 +1,126 @@
 # Day 02 - Kubernetes Architecture
 
-## Why This Matters
-
-Before you start using Kubernetes, you need to understand **what's happening inside**. If you skip this, you'll struggle to debug problems later.
+> **Goal:** Understand what's happening *inside* a Kubernetes cluster - the control plane, the worker nodes, and how a request flows through them.
 
 ---
 
-## Big Picture - The Cluster
+## Learning Objectives
+
+By the end of this lesson, you will be able to:
+
+- Describe the two kinds of machines in a cluster (control plane vs. worker nodes)
+- Name the control plane components (API server, etcd, scheduler, controller manager) and what each does
+- Name the worker node components (kubelet, kube-proxy, container runtime) and what each does
+- Trace what happens, step by step, when you run `kubectl apply -f pod.yaml`
+- Explain why understanding the architecture makes debugging much easier
+
+---
+
+## Why This Matters
+
+Before you start *using* Kubernetes, you need to understand **what's happening inside**. If you skip this, debugging later feels like magic gone wrong. Once you know the parts, error messages start to make sense.
+
+---
+
+## Real-World Analogy: A Hospital
+
+A Kubernetes cluster works a lot like a **hospital**:
+
+- The **control plane** is the **administration wing** - doctors, the records room, the admissions desk, the supervisor. It *decides* what should happen.
+- The **worker nodes** are the **hospital floors** - nurses, equipment, and the patients (your apps). This is where the actual care happens.
+
+We'll reuse this hospital analogy for every component below.
+
+---
+
+## Big Picture: The Cluster
 
 A Kubernetes **cluster** has two types of machines (nodes):
 
-```
-┌──────────────────────────────────────────────────────────────┐
-│                    KUBERNETES CLUSTER                         │
-│                                                              │
-│  ┌──────────────────┐    ┌──────────────┐ ┌──────────────┐  │
-│  │   MASTER NODE     │    │ WORKER NODE 1│ │ WORKER NODE 2│  │
-│  │   (Control Plane) │    │              │ │              │  │
-│  │                   │    │ ┌──┐ ┌──┐    │ │ ┌──┐ ┌──┐   │  │
-│  │  Decides WHAT     │    │ │P1│ │P2│    │ │ │P3│ │P4│   │  │
-│  │  should happen    │    │ └──┘ └──┘    │ │ └──┘ └──┘   │  │
-│  │                   │    │              │ │              │  │
-│  │                   │    │ Runs the     │ │ Runs the     │  │
-│  │                   │    │ actual apps  │ │ actual apps  │  │
-│  └──────────────────┘    └──────────────┘ └──────────────┘  │
-└──────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph Cluster[" Kubernetes Cluster"]
+        subgraph CP[" Control Plane (Master)"]
+            direction LR
+            api["kube-apiserver"]
+            etcd["etcd"]
+            sched["kube-scheduler"]
+            cm["kube-controller-manager"]
+        end
+        subgraph W1[" Worker Node 1"]
+            k1["kubelet"]
+            p1["kube-proxy"]
+            r1["container runtime"]
+            pod1(["Pod"])
+            pod2(["Pod"])
+        end
+        subgraph W2[" Worker Node 2"]
+            k2["kubelet"]
+            p2["kube-proxy"]
+            r2["container runtime"]
+            pod3(["Pod"])
+        end
+        CP -->|instructs| W1
+        CP -->|instructs| W2
+    end
 ```
 
-> **Master Node** = The **brain** - makes all decisions
-> **Worker Nodes** = The **hands** - do the actual work (run your containers)
+> **Control plane** = the **brain** - makes all the decisions.
+> **Worker nodes** = the **hands** - do the actual work (run your containers).
+
+> In modern Kubernetes the older term "master node" has been replaced by **control plane**. You'll still hear "master" in older docs.
 
 ---
 
-## Master Node (Control Plane) Components
+## Control Plane Components
 
-The master node has 4 main components:
+The control plane has 4 main components.
 
 ### 1. API Server (`kube-apiserver`)
 
-```
-You (kubectl) ──→ API Server ──→ Rest of K8s
+```mermaid
+flowchart LR
+    you["You (kubectl)"] --> api["API Server"] --> rest["Rest of K8s"]
 ```
 
-- **What:** The front door of Kubernetes. EVERYTHING goes through it.
-- **Why:** Single entry point. When you type `kubectl get pods`, the request goes to API Server first.
-- **Analogy:** The **receptionist** at a hospital. Every request goes through them first.
+- **What:** The front door of Kubernetes. **Everything** goes through it.
+- **Why:** A single entry point. When you type `kubectl get pods`, the request hits the API server first.
+- **Analogy:** The **admissions desk / receptionist** - every request goes through them first.
 
 ### 2. etcd
 
-- **What:** A key-value database that stores ALL cluster data.
-- **Why:** K8s needs to remember: how many pods are running? what version? which node? All stored in etcd.
-- **Analogy:** The **hospital's record room**. All patient records, room assignments, everything is stored here.
-- **Important:** If etcd is lost, your entire cluster's configuration is lost. Always back it up!
+- **What:** A key-value database that stores **all** cluster data (the "source of truth").
+- **Why:** K8s must remember how many pods are running, which version, on which node - all of it lives in etcd.
+- **Analogy:** The **records room** - every patient record and room assignment is stored here.
+- **Important:** If etcd is lost, your cluster's entire configuration is lost. Always back it up!
 
 ### 3. Scheduler (`kube-scheduler`)
 
-```
-New Pod needs to run → Scheduler picks the best Worker Node
+```mermaid
+flowchart LR
+    newpod["New Pod (no node yet)"] --> sched["Scheduler"] --> node["Best Worker Node"]
 ```
 
-- **What:** Decides WHICH worker node should run a new pod.
-- **Why:** Not all nodes are equal. Some have more CPU, some have more RAM. Scheduler picks the best fit.
-- **Analogy:** The **room assignment desk** at a hospital. New patient arrives → checks which room has space → assigns room.
+- **What:** Decides **which** worker node should run a new pod.
+- **Why:** Nodes differ - some have more CPU, some more RAM. The scheduler picks the best fit.
+- **Analogy:** The **room-assignment desk** - a new patient arrives, it finds a room with space and assigns it.
 
-**How Scheduler Decides:**
+**How the scheduler decides:**
 - Does the node have enough CPU/RAM?
-- Does the pod have any specific requirements (e.g., must run on a node with GPU)?
+- Does the pod have special requirements (e.g., must run on a node with a GPU)?
 - Is the node already overloaded?
 
 ### 4. Controller Manager (`kube-controller-manager`)
 
-- **What:** Runs background loops that check: "Is the actual state = desired state?"
-- **Why:** You say "I want 3 pods". Controller checks: are there 3? If only 2, it creates 1 more.
-- **Analogy:** The **hospital supervisor** who walks around checking: "Are all departments staffed properly?"
+- **What:** Runs background loops that constantly ask: *"Does the actual state match the desired state?"*
+- **Why:** You say "I want 3 pods." The controller checks - if only 2 exist, it creates one more.
+- **Analogy:** The **floor supervisor** walking around asking "Is every department staffed properly?"
 
-**Types of Controllers:**
+**Common controllers:**
+
 | Controller | What It Does |
-|-----------|-------------|
-| ReplicaSet Controller | Ensures correct number of pod replicas |
+|-----------|--------------|
+| ReplicaSet Controller | Ensures the correct number of pod replicas |
 | Deployment Controller | Manages rolling updates |
 | Node Controller | Monitors node health |
 | Job Controller | Manages one-time tasks |
@@ -86,118 +129,132 @@ New Pod needs to run → Scheduler picks the best Worker Node
 
 ## Worker Node Components
 
-Each worker node has 3 main components:
+Each worker node has 3 main components.
 
 ### 1. Kubelet
 
-- **What:** An agent running on every worker node. Talks to API Server.
-- **Why:** API Server tells kubelet "run this pod", kubelet makes it happen.
-- **Analogy:** The **nurse** on each hospital floor. Receives instructions from doctor, takes care of patients.
+- **What:** An agent running on every worker node that talks to the API server.
+- **Why:** The API server tells the kubelet "run this pod," and the kubelet makes it happen.
+- **Analogy:** The **nurse** on each floor - receives instructions from the doctor and cares for patients.
 
 ### 2. Kube-Proxy
 
 - **What:** Handles networking on each node.
 - **Why:** When a request comes for your app, kube-proxy routes it to the right pod.
-- **Analogy:** The **hospital's internal phone system**. Routes calls to the correct department.
+- **Analogy:** The **internal phone system** - routes calls to the correct department.
 
 ### 3. Container Runtime
 
-- **What:** The software that actually runs containers (Docker, containerd, CRI-O).
-- **Why:** K8s doesn't run containers itself. It tells the container runtime to do it.
-- **Analogy:** The **medical equipment**. The nurse (kubelet) uses equipment (container runtime) to treat patients (run containers).
+- **What:** The software that actually runs containers (containerd, CRI-O - or Docker via a shim in older clusters).
+- **Why:** K8s doesn't run containers itself; it asks the container runtime to do it.
+- **Analogy:** The **medical equipment** - the nurse (kubelet) uses it to treat patients (run containers).
+
+> **Note:** Kubernetes removed the built-in Docker shim ("dockershim") in **v1.24**. Most clusters now use **containerd** or **CRI-O** directly. Your Docker-built images still run fine - image format is unchanged.
 
 ---
 
 ## How It All Works Together
 
-Let's trace what happens when you run: `kubectl apply -f pod.yaml`
+Let's trace what happens when you run `kubectl apply -f pod.yaml`:
 
-```
-Step 1: kubectl sends request to API Server
-         │
-Step 2: API Server validates the request and stores it in etcd
-         │
-Step 3: Scheduler notices "there's a new pod with no node assigned"
-         │
-Step 4: Scheduler picks the best worker node → tells API Server
-         │
-Step 5: API Server tells the Kubelet on that worker node
-         │
-Step 6: Kubelet tells Container Runtime to pull image and start container
-         │
-Step 7: Container is running! Kubelet reports status back to API Server
-         │
-Step 8: API Server updates etcd with the pod's current status
+```mermaid
+sequenceDiagram
+    participant U as You (kubectl)
+    participant A as API Server
+    participant E as etcd
+    participant S as Scheduler
+    participant K as Kubelet (worker)
+    participant R as Container Runtime
+
+    U->>A: 1. apply -f pod.yaml
+    A->>E: 2. validate + store desired state
+    S->>A: 3. notices unscheduled pod
+    S->>A: 4. picks best node, reports back
+    A->>K: 5. tells kubelet on that node
+    K->>R: 6. pull image + start container
+    R-->>K: container running
+    K->>A: 7. report status
+    A->>E: 8. update actual status
 ```
 
----
-
-## Complete Architecture Diagram
-
-```
-┌─────────────────── MASTER NODE ───────────────────┐
-│                                                    │
-│  ┌────────────┐  ┌──────────────────────────────┐ │
-│  │            │  │      Controller Manager       │ │
-│  │   etcd     │  │  (ReplicaSet, Deployment,     │ │
-│  │ (database) │  │   Node, Job controllers)      │ │
-│  │            │  └──────────────────────────────┘ │
-│  └────────────┘                                   │
-│        ↕            ┌──────────────┐              │
-│  ┌────────────┐     │  Scheduler   │              │
-│  │ API Server │ ←──→│  (picks      │              │
-│  │ (gateway)  │     │   nodes)     │              │
-│  └─────┬──────┘     └──────────────┘              │
-└────────┼──────────────────────────────────────────┘
-         │
-    ─────┼──────────────────────────────────────
-         │              NETWORK
-    ─────┼──────────────────────────────────────
-         │
-┌────────┼───── WORKER NODE 1 ─────┐  ┌──── WORKER NODE 2 ────┐
-│        ↓                          │  │                        │
-│  ┌──────────┐                    │  │  ┌──────────┐          │
-│  │ Kubelet  │                    │  │  │ Kubelet  │          │
-│  └────┬─────┘                    │  │  └────┬─────┘          │
-│       ↓                          │  │       ↓                │
-│  ┌──────────┐  ┌──────────────┐  │  │  ┌──────────┐         │
-│  │Container │  │  Kube-Proxy  │  │  │  │Container │         │
-│  │ Runtime  │  │ (networking) │  │  │  │ Runtime  │         │
-│  └────┬─────┘  └──────────────┘  │  │  └────┬─────┘         │
-│       ↓                          │  │       ↓                │
-│  ┌────┐ ┌────┐ ┌────┐           │  │  ┌────┐ ┌────┐        │
-│  │Pod1│ │Pod2│ │Pod3│           │  │  │Pod4│ │Pod5│        │
-│  └────┘ └────┘ └────┘           │  │  └────┘ └────┘        │
-└──────────────────────────────────┘  └────────────────────────┘
-```
+**In words:**
+1. `kubectl` sends the request to the **API server**.
+2. The API server validates it and stores the desired state in **etcd**.
+3. The **scheduler** notices a new pod with no node assigned.
+4. The scheduler picks the best worker node and tells the API server.
+5. The API server tells the **kubelet** on that node.
+6. The kubelet asks the **container runtime** to pull the image and start the container.
+7. The container is running; the kubelet reports status back to the API server.
+8. The API server updates **etcd** with the pod's current status.
 
 ---
 
 ## Summary Table
 
 | Component | Where | What It Does |
-|-----------|-------|-------------|
-| API Server | Master | Front door - receives all requests |
-| etcd | Master | Database - stores all cluster state |
-| Scheduler | Master | Picks which node runs a new pod |
-| Controller Manager | Master | Ensures desired state = actual state |
+|-----------|-------|--------------|
+| API Server | Control plane | Front door - receives all requests |
+| etcd | Control plane | Database - stores all cluster state |
+| Scheduler | Control plane | Picks which node runs a new pod |
+| Controller Manager | Control plane | Keeps actual state = desired state |
 | Kubelet | Worker | Runs pods on the node |
 | Kube-Proxy | Worker | Handles networking/routing |
-| Container Runtime | Worker | Actually runs containers |
+| Container Runtime | Worker | Actually runs the containers |
 
 ---
 
-## Practice / Homework
+## Hands-On / Practice
 
-1. Draw the Kubernetes architecture on paper from memory
-2. Answer these questions:
-   - What happens if etcd goes down?
-   - Where does your app actually run - Master or Worker?
-   - If you run `kubectl get pods`, which component handles your request first?
-   - What's the difference between Scheduler and Controller Manager?
-3. Run `kubectl get componentstatuses` (if you have a cluster) to see all components
+If you already have a cluster running (we set one up on Day 03), try these:
+
+```bash
+# List the nodes in your cluster (control plane + workers)
+kubectl get nodes
+
+# See the control plane components running as pods
+kubectl get pods -n kube-system
+```
+
+- `kubectl get nodes` - shows every machine in the cluster and its status.
+- `kubectl get pods -n kube-system` - the `-n kube-system` flag looks in the system namespace, where the API server, etcd, scheduler, and controller manager actually run.
+
+> **Pen-and-paper homework:** Draw the architecture from memory, then answer:
+> - What happens if etcd goes down?
+> - Where does your app actually run - control plane or worker?
+> - Which component handles `kubectl get pods` *first*?
+> - What's the difference between the scheduler and the controller manager?
 
 ---
 
-**Previous:** [← Day 01 - Why Kubernetes?](../day01-why-kubernetes/notes.md)
-**Next:** [Day 03 - Setting Up K8s →](../day03-setup/notes.md)
+## Common Mistakes
+
+1. **Thinking apps run on the control plane.** Your apps run on **worker nodes**. The control plane only makes decisions.
+2. **Ignoring etcd backups.** Lose etcd and you lose the whole cluster's state - back it up in any real setup.
+3. **Confusing the scheduler with the controller manager.** The scheduler *places* a new pod on a node; the controller manager *maintains* the desired count and state over time.
+4. **Believing Kubernetes runs containers itself.** It delegates to a container runtime (containerd/CRI-O). K8s only orchestrates.
+5. **Bypassing the API server in your mental model.** Every component communicates *through* the API server - it's never a direct free-for-all.
+
+---
+
+## Quick Self-Check
+
+1. Name the four control plane components and one job of each.
+2. Which component is the single entry point for every request?
+3. On which type of node do your application pods actually run?
+4. What is stored in etcd, and why is backing it up important?
+5. In the `kubectl apply` flow, what does the scheduler do, and when?
+
+---
+
+## Summary
+
+- A cluster has a **control plane** (the brain) and **worker nodes** (the hands).
+- Control plane = **API server** (front door), **etcd** (database), **scheduler** (placement), **controller manager** (keeps desired = actual).
+- Worker node = **kubelet** (agent), **kube-proxy** (networking), **container runtime** (runs containers).
+- Every request flows **through the API server**; understanding this flow makes debugging far easier.
+
+**Next up ->** [Day 03 - Setting Up Kubernetes](../day03-setup/notes.md)
+
+---
+
+*This is part of the [Learn Kubernetes](../README.md) series.*

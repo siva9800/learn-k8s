@@ -1,4 +1,45 @@
-# Day 09 - ConfigMaps & Secrets
+# Day 10 - ConfigMaps & Secrets
+
+> **Goal:** Keep configuration and sensitive data **out of your container images** by injecting them at runtime with ConfigMaps and Secrets.
+
+## Learning Objectives
+- Explain why config should be separate from code
+- Create ConfigMaps and Secrets (imperatively and with YAML)
+- Inject them as **environment variables** or **mounted files (volumes)**
+- Understand the critical truth: **Secrets are base64-ENCODED, NOT encrypted by default**
+
+---
+
+## Real-World Analogy: The Recipe vs. The Ingredients
+
+Think of your container image as a **recipe card** - it lists the *steps* but should never hard-code the *specific ingredients* for one kitchen.
+
+- A **ConfigMap** is like a **shopping list taped to the fridge**: "use 2% milk, oven at 180°C." Non-secret settings anyone can read.
+- A **Secret** is like the **safe combination or your card PIN**: still just written on paper, but you keep it locked away and don't read it aloud.
+
+You hand the cook (the Pod) the shopping list and the PIN **at cooking time** - you don't reprint the recipe card every time a price or PIN changes.
+
+> Same image, different config per environment (dev / staging / prod). Change the ConfigMap, not the image.
+
+---
+
+## How Config Reaches a Pod
+
+```mermaid
+flowchart LR
+    CM[ConfigMap<br/>non-secret settings] -->|env var| Pod
+    CM -->|mounted file| Pod
+    SEC[Secret<br/>sensitive data] -->|env var| Pod
+    SEC -->|mounted file| Pod
+    subgraph Pod[Pod / Container]
+        ENV[Environment variables<br/>e.g. APP_COLOR]
+        VOL[Volume files<br/>e.g. /etc/config/...]
+    end
+```
+
+There are **two ways** to inject either one: as **environment variables** (simple key/value) or as **mounted files** (whole config files / certs).
+
+---
 
 ## The Problem - Hardcoded Configuration
 
@@ -12,7 +53,7 @@ containers:
     - name: DB_HOST
       value: "192.168.1.100"      # ← Hardcoded!
     - name: DB_PASSWORD
-      value: "supersecret123"      # ← Password in YAML! 😱
+      value: "supersecret123"      # ← Password in YAML! 
 ```
 
 **Problems:**
@@ -140,6 +181,25 @@ This creates files like:
 ---
 
 ## Secrets
+
+### The Most Important Point About Secrets
+
+> **A Kubernetes Secret is base64-ENCODED, not ENCRYPTED.**
+>
+> Base64 is just a reversible text format - **anyone who can read the Secret can decode it instantly.** It is NOT security on its own.
+
+```bash
+# "Encoding" is trivially reversible - no password needed:
+echo -n 'S3cr3t!' | base64        # -> UzNjcjN0IQ==
+echo 'UzNjcjN0IQ==' | base64 -d   # -> S3cr3t!   (decoded right back)
+```
+
+To make Secrets **actually** secure, you must additionally:
+- Enable **encryption at rest** (etcd encryption) on the cluster, and/or
+- Use an external secrets manager (HashiCorp Vault, AWS/GCP/Azure secret stores), and
+- Restrict access with **RBAC**.
+
+So why use Secrets at all? They keep sensitive values out of your image, can be mounted as in-memory (tmpfs) files instead of on disk, and integrate with RBAC so you can limit who reads them.
 
 ### What Is a Secret?
 
@@ -321,6 +381,34 @@ EOF
 kubectl logs config-test
 # Output: Color=blue Mode=production Key=my-secret-key-123
 ```
+
+---
+
+## Common Mistakes
+
+1. **Believing Secrets are encrypted.** They are **base64-encoded only** by default - anyone with read access decodes them in one command. Add etcd encryption-at-rest + RBAC for real protection.
+2. **Committing Secret YAML with real values to Git.** Base64 hides nothing. Never push real credentials to a repo.
+3. **Hand-encoding into `data:` and getting it wrong** (e.g. a trailing newline). Use `echo -n` to avoid the newline, or just use `stringData:`.
+4. **Expecting env-var changes to reach a running Pod.** Editing a ConfigMap/Secret used as **env vars** does NOT update existing Pods - you must `kubectl rollout restart`. (Mounted-volume values do update eventually.)
+5. **Key name mismatch.** The `key:` in `configMapKeyRef`/`secretKeyRef` must exactly match a key in the ConfigMap/Secret, or the Pod fails to start.
+
+---
+
+## Quick Self-Check
+
+1. Why should configuration live outside the container image?
+2. What are the two ways to inject a ConfigMap or Secret into a Pod?
+3. **True or false:** Kubernetes Secrets are encrypted by default. Explain your answer.
+4. What does `stringData:` do that `data:` doesn't?
+5. You changed a ConfigMap used as env vars, but the running Pod still shows the old value. Why, and how do you fix it?
+
+---
+
+## Summary
+
+**ConfigMaps** hold non-secret settings; **Secrets** hold sensitive data - but Secrets are only **base64-encoded, not encrypted**, so add etcd encryption-at-rest and RBAC for real security. Inject either as **environment variables** or **mounted files**, keeping the same image reusable across dev, staging, and prod.
+
+Next up → [Day 11 - Amazon EKS](../day11-eks/notes.md)
 
 ---
 

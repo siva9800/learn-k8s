@@ -1,9 +1,43 @@
 # Day 18 - Ingress Demo (EKS / Production - AWS ALB)
 
+> **Goal:** Use the **same** Ingress YAML you learned on Minikube to make AWS automatically create a real, internet-facing **Application Load Balancer (ALB)** - with free HTTPS certificates from ACM.
+
 > **Pre-requisites:**
-> - [Day 17 - Ingress Theory](../day17-ingress/notes.md)
-> - [Day 18 - Ingress Demo (Local / Minikube)](notes.md)
-> - A running EKS cluster with the EBS CSI driver working
+> - [Day 18 - Ingress Demo (Local / Minikube)](notes.md) - the Ingress concepts and YAML structure are introduced there
+> - A running EKS cluster (see [Day 11 - EKS](../day11-eks/notes.md)) with a working CNI; the EBS CSI driver is only needed if your apps use EBS volumes
+
+## Learning Objectives
+
+By the end you will be able to:
+
+1. Explain why EKS uses the **AWS Load Balancer Controller** instead of nginx.
+2. Install that controller using IAM + IRSA + Helm.
+3. Create an Ingress that provisions a **real ALB** for path- and host-based routing.
+4. Add free, auto-renewing **HTTPS** using an ACM certificate (no Secret needed).
+5. Choose between **instance** and **ip** target types.
+6. Troubleshoot ALBs that fail to appear (usually subnet tags or IAM).
+
+## Real-World Analogy: From In-House Receptionist to a City Concierge Service
+
+On Minikube, the nginx Ingress Controller was an **in-house receptionist** - she lived *inside* your building (the cluster) and pointed visitors to the right room.
+
+On EKS, you instead hire a **city-wide concierge service (AWS ALB)** that has its own public office on the main street (a real public DNS name on the internet). You still write the *same instruction sheet* (the Ingress YAML), but now a manager (the **AWS Load Balancer Controller**) reads it and phones AWS to set up that public concierge desk for you - listeners, target groups, health checks and all.
+
+- **Ingress YAML** = the instruction sheet (almost identical to Minikube - only the annotations and `ingressClassName: alb` change).
+- **AWS Load Balancer Controller** = the manager who turns your sheet into real AWS infrastructure.
+- **ALB** = the public concierge desk with a real internet address.
+- **ACM certificate** = an official, always-valid ID badge AWS renews automatically (vs. the homemade self-signed badge on Minikube).
+
+```mermaid
+flowchart LR
+    DEV["You apply<br/>Ingress YAML<br/>(ingressClassName: alb)"] --> CTRL
+    CTRL["AWS LB Controller<br/>(pod in kube-system)<br/>watches Ingress"] -->|"calls AWS API"| ALB
+    NET[" Internet user"] --> ALB
+    ALB["AWS ALB<br/>(real public DNS)"] -->|"host / path rules"| TG1["Target Group: app1"]
+    ALB -->|"host / path rules"| TG2["Target Group: app2"]
+    TG1 --> P1["app1 pods"]
+    TG2 --> P2["app2 pods"]
+```
 
 ## Minikube vs EKS Ingress - Key Difference
 
@@ -901,6 +935,47 @@ aws ec2 describe-security-groups --group-ids <sg-id>
 
 ---
 
+## Common Mistakes
+
+1. **Untagged subnets -> ALB never appears (and fails silently).** The controller discovers where to put the ALB via subnet tags. Public subnets need `kubernetes.io/role/elb=1`; private subnets need `kubernetes.io/role/internal-elb=1`. eksctl tags them for you; Terraform/Console users must add them.
+2. **`serviceAccount.create=true` overwriting IRSA.** When installing via Helm after `eksctl create iamserviceaccount`, you must pass `--set serviceAccount.create=false`. Otherwise Helm recreates the ServiceAccount without the IAM role annotation and the controller loses its AWS permissions.
+3. **Using `ingressClassName: nginx` by habit.** On EKS it must be `alb`. With `nginx`, the AWS controller ignores your Ingress and no ALB is created.
+4. **Wrong Service type for the target mode.** `target-type: instance` needs a **NodePort** Service; `target-type: ip` works with **ClusterIP**. Mismatching them produces unhealthy targets.
+5. **Forgetting that deleting the Ingress deletes the ALB.** That's the intended behavior, but people sometimes leave orphaned ALBs (costing ~$16/mo each) by deleting the cluster's nodes without first `kubectl delete ingress`.
+
+## Quick Self-Check
+
+1. What single line in the Ingress YAML is the biggest difference between the Minikube (nginx) and EKS (ALB) versions?
+2. Why don't you need to create a Kubernetes TLS Secret on EKS?
+3. What two AWS tags let the controller auto-discover public vs private subnets?
+4. When would you choose `target-type: ip` over `instance`?
+5. Your `kubectl get ingress` shows no `ADDRESS` after several minutes. Name two things to check.
+
+<details>
+<summary>Answers</summary>
+
+1. `ingressClassName: alb` (instead of `nginx`).
+2. Because the certificate lives in **ACM**; you just reference its ARN with the `certificate-arn` annotation, and AWS handles renewal.
+3. `kubernetes.io/role/elb=1` (public) and `kubernetes.io/role/internal-elb=1` (private).
+4. For lowest latency (ALB talks straight to pod IPs, skipping the NodePort hop) and when running on **Fargate**, which *requires* ip mode.
+5. (a) The controller logs: `kubectl logs -n kube-system deployment/aws-load-balancer-controller`; (b) subnet tags and IAM permissions.
+
+</details>
+
+---
+
+## Summary
+
+- On EKS, the **AWS Load Balancer Controller** turns your Ingress YAML into a **real AWS ALB** - a public, internet-facing concierge desk.
+- The Ingress structure is the same as Minikube; only the **annotations** (`alb.ingress.kubernetes.io/...`) and **`ingressClassName: alb`** change.
+- **HTTPS is easier in production:** reference an **ACM** certificate ARN - no Secret, auto-renewal, valid green lock.
+- Choose **instance** mode (NodePort, simple) or **ip** mode (ClusterIP, faster, required on Fargate).
+- Most ALB failures trace back to **subnet tags** or **IAM/IRSA** - always check the controller logs first.
+
+**Next up ->** [Day 19 - DaemonSets, Jobs & CronJobs](../day19-daemonsets-jobs-cronjobs/notes.md)
+
+---
+
 ## Clean Up All Resources
 
 ```bash
@@ -917,4 +992,4 @@ aws elbv2 describe-load-balancers --query 'LoadBalancers[?contains(LoadBalancerN
 
 ---
 
-**Theory:** [Day 17 - Ingress](../day17-ingress/notes.md) | **Local Demo:** [Ingress Demo (Minikube)](notes.md)
+**Local Demo:** [Ingress Demo (Minikube)](notes.md) | **Next:** [Day 19 - DaemonSets, Jobs & CronJobs](../day19-daemonsets-jobs-cronjobs/notes.md)

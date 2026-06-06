@@ -1,9 +1,65 @@
 # Day 13 - Volumes Demo (EKS / Production)
 
+> **Goal:** Run real persistent storage on **AWS EKS** - back your PVCs with genuine **EBS** (single-node) and **EFS** (shared) volumes via CSI drivers, and learn the cost & access-mode gotchas that bite people in production.
+
 > **Pre-requisite:** Read [AWS Volumes Theory (EBS & EFS)](../day12-volumes/aws-volumes/notes.md) before this demo.
 > **Local demos:** See [Volumes Demo (Local / Minikube)](notes.md) for emptyDir, hostPath, Local PV demos.
 
 These demos run on an **EKS cluster** with real AWS storage (EBS & EFS). Everything here is production-grade.
+
+---
+
+## Learning Objectives
+
+By the end you will be able to:
+
+- Install and verify the **EBS CSI driver** with an **IRSA** IAM role
+- Use **static** and **dynamic** EBS provisioning
+- Run **MySQL on EBS** and expand a volume live
+- Use **EFS (ReadWriteMany)** to share files across nodes
+- Give each StatefulSet pod its **own EBS** via `volumeClaimTemplates`
+- Recognise the classic **EBS + multi-replica Deployment = Multi-Attach error**
+
+---
+
+## Real-World Analogy: EBS vs EFS
+
+On EKS, **AWS is the storage company** - but it won't hand out disks to a stranger. The **CSI driver** is the clerk who knows how to order disks; the **IRSA IAM role** is the clerk's *badge* proving they're allowed. No badge → no disks → PVCs stuck `Pending`.
+
+Two very different "lockers":
+
+- **EBS = a personal safe-deposit box.** Exactly **one person (node) at a time** can open it (`ReadWriteOnce`), and it lives in **one bank branch (Availability Zone)**. Perfect for a single database instance.
+- **EFS = a shared community filing room.** **Many people (nodes) read and write at once** (`ReadWriteMany`), reachable from every branch. Perfect for shared uploads/configs.
+
+Pick the wrong one (e.g. try to share an EBS box across 3 people) and you get the **Multi-Attach error** in Demo 6.
+
+---
+
+## How Dynamic EBS Provisioning Works on EKS
+
+```mermaid
+flowchart LR
+    PVC[" PVC (gp3, 5Gi)"] --> SC[" StorageClass<br/>ebs.csi.aws.com"]
+    SC --> Driver[" EBS CSI Driver"]
+    Driver -->|assumes role via IRSA| IAM[" IRSA Role<br/>AmazonEBSCSIDriverPolicy"]
+    Driver -->|CreateVolume / AttachVolume| EBS[(" Real AWS EBS<br/>in pod's AZ")]
+    EBS --> Node[" EC2 Worker Node"] --> Pod[" Pod /data"]
+
+    classDef aws fill:#fff7ed,stroke:#ea580c;
+    class IAM,EBS,Node aws;
+```
+
+```mermaid
+flowchart TB
+    subgraph EBSb["EBS = ReadWriteOnce (one node)"]
+      E1[" Pod"] --> EV[(" EBS")]
+    end
+    subgraph EFSb["EFS = ReadWriteMany (many nodes)"]
+      F1[" Pod node-1"] --> FV[(" EFS")]
+      F2[" Pod node-2"] --> FV
+      F3[" Pod node-3"] --> FV
+    end
+```
 
 ```
 What you need before starting:
@@ -255,7 +311,7 @@ Flow:
 # First, find which AZ your nodes are in
 kubectl get nodes -o wide
 # NAME                                           STATUS   ROLES    AGE   VERSION   INTERNAL-IP   EXTERNAL-IP   OS-IMAGE         KERNEL-VERSION                  CONTAINER-RUNTIME
-# ip-192-168-1-100.ap-south-1.compute.internal   Ready    <none>   2d    v1.28.3   192.168.1.100   <none>      Amazon Linux 2   5.10.205-195.807.amzn2.x86_64   containerd://1.7.2
+# ip-192-168-1-100.ap-south-1.compute.internal   Ready    <none>   2d    v1.31.0   192.168.1.100   <none>      Amazon Linux 2023   6.1.x.amzn2023.x86_64   containerd://1.7.x
 
 # Check which AZ each node is in
 kubectl get nodes --label-columns topology.kubernetes.io/zone
@@ -595,12 +651,12 @@ kubectl delete sc ebs-gp3
 │                           │
 │  ┌── mysql container ──┐ │
 │  │  MySQL 8.0           │ │
-│  │  /var/lib/mysql ─────┼─┼──► PVC (mysql-ebs-pvc)
+│  │  /var/lib/mysql ─────┼─┼── PVC (mysql-ebs-pvc)
 │  │                      │ │        │
-│  └──────────────────────┘ │        ▼
+│  └──────────────────────┘ │        
 │                           │    StorageClass (ebs-gp3)
 └───────────────────────────┘        │
-                                     ▼
+                                     
                               EBS Volume (gp3, 20Gi)
                               Auto-created by CSI driver
                               Data survives pod restarts!
@@ -1448,6 +1504,48 @@ kubectl delete sc ebs-gp3-fail
 
 ---
 
+## Common Mistakes
+
+1. **Skipping the IRSA IAM role.** Without `AmazonEBSCSIDriverPolicy` bound to the driver's service account, the driver can't call EC2 - PVCs hang `Pending`. Check `kubectl logs -n kube-system -l app.kubernetes.io/name=aws-ebs-csi-driver`.
+2. **Forgetting to install the driver at all.** Vanilla EKS has **no** EBS CSI driver (the in-tree provisioner was removed). No driver = no dynamic EBS.
+3. **Cross-AZ EBS attachment.** EBS is AZ-locked. With `Immediate` binding the volume can land in a different AZ than the pod and never attach. Use `volumeBindingMode: WaitForFirstConsumer`.
+4. **EBS + Deployment with `replicas > 1`** → `Multi-Attach error` (Demo 6). Use a **StatefulSet** (per-pod EBS) or **EFS** (RWX) instead.
+5. **Leaving volumes behind = surprise bill.** With `reclaimPolicy: Retain` (or forgetting to delete PVCs), EBS volumes keep billing. Always verify with `aws ec2 describe-volumes`.
+
+---
+
+## Quick Self-Check
+
+1. Why does a fresh EKS cluster need the EBS CSI driver before any dynamic EBS provisioning works?
+2. What is **IRSA**, and what would happen to your PVCs without it?
+3. Why is `WaitForFirstConsumer` strongly recommended for EBS-backed StorageClasses?
+4. You set a Deployment to `replicas: 3` all using one EBS PVC. What error appears on pods 2 and 3, and what are the two correct fixes?
+5. After `kubectl delete pvc` with `reclaimPolicy: Retain`, is your AWS bill clean? What command confirms it?
+
+<details>
+<summary>Answers</summary>
+
+1. The in-tree EBS provisioner was removed; EKS creates EBS only through the external **EBS CSI driver** add-on.
+2. **IAM Roles for Service Accounts** - lets the driver's K8s service account assume an AWS IAM role. Without it the driver can't create/attach volumes, so **PVCs stay `Pending`**.
+3. EBS volumes are **AZ-bound**; waiting for the consumer provisions the volume in the **same AZ as the pod**, avoiding attach failures.
+4. **`Multi-Attach error`** (EBS is RWO, one node only). Fixes: use a **StatefulSet with `volumeClaimTemplates`** (one EBS per pod) or use **EFS (RWX)**.
+5. **No** - `Retain` leaves the EBS volume in AWS. Confirm/clean with `aws ec2 describe-volumes --filters "Name=tag:kubernetes.io/created-for/pvc/name,Values=<pvc>"` and delete leftovers.
+
+</details>
+
+---
+
+## Summary
+
+- EKS needs the **EBS CSI driver + IRSA role** before PVCs can be backed by real EBS.
+- Prefer **dynamic provisioning** with a `gp3`, `WaitForFirstConsumer`, encrypted StorageClass.
+- **EBS = RWO** (one node); **EFS = RWX** (many nodes) - pick by access pattern.
+- **StatefulSet + volumeClaimTemplates** gives each pod its own EBS (the database pattern).
+- **EBS + multi-replica Deployment = Multi-Attach error.** Use a StatefulSet or EFS.
+- Use **Retain** for databases, and **always clean up volumes** to stop charges.
+
+---
+
 ## Practice / Homework
 
 1. Create an EBS volume manually in AWS and use it in a pod (static provisioning)
@@ -1460,6 +1558,8 @@ kubectl delete sc ebs-gp3-fail
 8. Scale a StatefulSet down to 1, then back to 3, and verify data is preserved
 
 ---
+
+**Next up →** [Day 14 - StatefulSets (Theory)](../day14-statefulsets/notes.md) - where per-pod EBS and stable identity become a first-class workload.
 
 **Related:** [Volumes Theory](../day12-volumes/notes.md) | [AWS Volumes Theory (EBS & EFS)](../day12-volumes/aws-volumes/notes.md) | [Local Demos (Minikube)](notes.md)
 **Previous:** [← Day 12 - Volumes (Theory)](../day12-volumes/notes.md)

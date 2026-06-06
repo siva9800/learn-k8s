@@ -1,5 +1,84 @@
 # Day 14 - StatefulSets
 
+> **Goal:** Understand the Kubernetes workload built for apps that need a **permanent identity, ordered startup, and their own storage** - databases, queues, and clustered systems.
+
+## Learning Objectives
+
+By the end of this lesson you will be able to:
+
+- Explain *why* Deployments fail for stateful apps like databases
+- Describe the **three guarantees** a StatefulSet adds: stable names, stable storage, stable network identity
+- Read and write StatefulSet YAML (`serviceName`, `volumeClaimTemplates`)
+- Predict pod names, PVC names, and start/stop **order**
+- Understand what a **headless Service** does and why it's required
+- Decide when **not** to use a StatefulSet
+
+---
+
+## Real-World Analogy: Temp Workers vs Permanent Staff
+
+**Deployment = a pool of interchangeable temp workers.** The agency sends *some number* of temps. It doesn't matter which one mans which station - any temp can do any job, and if one calls in sick, a replacement just fills in. No assigned desk, no permanent badge, random names.
+
+**StatefulSet = permanent employees with ID badges and assigned desks.**
+
+- Each has a **permanent ID** (`mysql-0`, `mysql-1`, `mysql-2`) that **never changes**.
+- Each has **their own desk and locker** (their own PVC) - `mysql-1`'s drawer is always `mysql-1`'s, even after a vacation (restart).
+- They're **hired in order** (0, then 1, then 2) and **laid off in reverse** (2 first) - so the senior/primary one starts first and leaves last.
+- You can phone **`mysql-1` directly** at their desk (stable DNS), not just "whoever picks up."
+
+A database *needs* to be a permanent employee: it must know "am I the primary or a replica?", keep its own data drawer, and be reachable at a known address. That's a StatefulSet.
+
+---
+
+## Diagram: Anatomy of a StatefulSet
+
+```mermaid
+flowchart TB
+    SVC[" Headless Service: mysql-headless<br/>clusterIP: None<br/>(stable DNS per pod)"]
+
+    subgraph SS["StatefulSet: mysql (replicas: 3)"]
+      direction LR
+      P0[" mysql-0<br/>(starts 1st)"]
+      P1[" mysql-1"]
+      P2[" mysql-2<br/>(starts last)"]
+    end
+
+    SVC -.DNS.-> P0
+    SVC -.DNS.-> P1
+    SVC -.DNS.-> P2
+
+    P0 --> C0[" PVC<br/>mysql-data-mysql-0"] --> V0[(" disk 0")]
+    P1 --> C1[" PVC<br/>mysql-data-mysql-1"] --> V1[(" disk 1")]
+    P2 --> C2[" PVC<br/>mysql-data-mysql-2"] --> V2[(" disk 2")]
+
+    classDef pod fill:#dbeafe,stroke:#2563eb;
+    classDef pvc fill:#fef9c3,stroke:#ca8a04;
+    classDef pv fill:#dcfce7,stroke:#16a34a;
+    classDef svc fill:#f3e8ff,stroke:#9333ea;
+    class P0,P1,P2 pod;
+    class C0,C1,C2 pvc;
+    class V0,V1,V2 pv;
+    class SVC svc;
+```
+
+## Diagram: Ordered Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant K as Kubernetes
+    Note over K: Scale UP - ordered, one at a time
+    K->>K: Create mysql-0, wait until Ready 
+    K->>K: Create mysql-1, wait until Ready 
+    K->>K: Create mysql-2, wait until Ready 
+    Note over K: Scale DOWN - reverse order
+    K->>K: Terminate mysql-2 first
+    K->>K: Then mysql-1
+    K->>K: Then mysql-0 last
+    Note over K: PVCs (mysql-data-*) are KEPT, not deleted 
+```
+
+---
+
 ## The Problem: Why Can't We Use Deployments for Everything?
 
 Deployments work great for **stateless** applications like web servers and API services. But what about **stateful** applications like databases?
@@ -667,6 +746,47 @@ A: "Kubernetes StatefulSets don't replicate data. They provide stable names,
 
 ---
 
+## Common Mistakes
+
+1. **`serviceName` doesn't match a real headless Service.** `spec.serviceName` **must** equal the `metadata.name` of a `clusterIP: None` Service, or stable DNS (`mysql-0.mysql-headless`) silently breaks.
+2. **Forgetting `clusterIP: None`.** A normal Service load-balances to a single VIP - you lose per-pod DNS. The *governing* Service must be **headless**.
+3. **Mismatched labels.** The Service `selector`, the StatefulSet `spec.selector.matchLabels`, and the pod `template` labels must **all agree**, or pods aren't selected/served.
+4. **Expecting scale-down (or StatefulSet deletion) to free storage.** PVCs are **kept on purpose**. You must delete them by hand (`kubectl delete pvc mysql-data-mysql-2`).
+5. **Thinking Kubernetes replicates your data.** It does **not** - it only gives stable names, DNS, storage, and ordering. The *database* replicates (binlog/WAL/oplog). Never share one volume across replicas.
+
+---
+
+## Quick Self-Check
+
+1. Name two guarantees a StatefulSet gives that a Deployment does not.
+2. For a StatefulSet named `mysql` with 3 replicas and `volumeClaimTemplates` name `mysql-data`, what are the pod names and PVC names?
+3. What does `clusterIP: None` do, and which field in the StatefulSet must point at that Service?
+4. You scale `mysql` from 3 to 1. What happens to `mysql-2`'s PVC and its data?
+5. True or false: Kubernetes copies data from `mysql-0` to `mysql-1` for you. Explain.
+
+<details>
+<summary>Answers</summary>
+
+1. Any two of: **stable/ordered pod names**, **own PVC per pod (stable storage)**, **stable per-pod DNS (network identity)**, **ordered start/stop/rolling updates**.
+2. Pods: `mysql-0`, `mysql-1`, `mysql-2`. PVCs: `mysql-data-mysql-0`, `mysql-data-mysql-1`, `mysql-data-mysql-2` (pattern `<template>-<statefulset>-<ordinal>`).
+3. It makes the Service **headless** (no VIP) so DNS returns each pod's own record. The StatefulSet's **`spec.serviceName`** must reference that headless Service.
+4. The pod `mysql-2` is removed but its PVC `mysql-data-mysql-2` (and data) is **retained**. Scaling back to 3 reattaches it; delete the PVC manually to discard.
+5. **False.** Kubernetes provides stable names/DNS/storage/ordering only. The **database** replicates over the network using its own protocol (MySQL binlog, PostgreSQL WAL, MongoDB oplog).
+
+</details>
+
+---
+
+## Summary
+
+- A **StatefulSet** gives pods **identity**: stable ordered names, their own PVC, and stable DNS.
+- It requires a **headless Service** (`clusterIP: None`) referenced by `spec.serviceName`.
+- `volumeClaimTemplates` mints **one PVC per pod** (`<tpl>-<sts>-<ordinal>`); PVCs **survive** scale-down and deletion.
+- Pods start **0, 1, 2** and terminate in **reverse** - ideal for databases and clustered systems.
+- Kubernetes does **not** replicate data; the database does. Use a **Deployment** for stateless apps.
+
+---
+
 ## Practice / Homework
 
 1. Create a Headless Service and a StatefulSet with 3 replicas
@@ -677,6 +797,8 @@ A: "Kubernetes StatefulSets don't replicate data. They provide stable names,
 6. Recreate the StatefulSet and verify pods reattach to their original PVCs
 
 ---
+
+**Next up ->** [Day 15 - StatefulSets Hands-On Demo](../day15-statefulsets-demo/notes.md) - deploy one and prove every guarantee yourself.
 
 **Previous:** [<-- Day 13 - Volumes Demo](../day13-volumes-demo/notes.md)
 **Next:** [Day 15 - StatefulSets Demo -->](../day15-statefulsets-demo/notes.md)

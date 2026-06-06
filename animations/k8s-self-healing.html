@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kubernetes Self-Healing & Scaling — Interactive</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b1021;color:#e6e9f5;
+    min-height:100vh;padding:22px;display:flex;flex-direction:column;align-items:center;}
+  h1{font-size:1.55rem;text-align:center;}
+  p.sub{color:#9aa3c0;max-width:720px;text-align:center;margin:6px 0 16px;}
+  .analogy{background:#161d3a;border:1px solid #2a3566;border-left:4px solid #5b8def;
+    border-radius:8px;padding:12px 16px;max-width:780px;font-size:.88rem;margin-bottom:18px;}
+  .analogy b{color:#7aa2ff;}
+  .desired{display:flex;align-items:center;gap:14px;margin-bottom:14px;font-size:.95rem;}
+  .desired button{width:34px;height:34px;border-radius:8px;border:none;font-size:1.2rem;font-weight:800;cursor:pointer;background:#2a3566;color:#fff;}
+  .desired .n{font-size:1.5rem;font-weight:800;color:#7aa2ff;min-width:30px;text-align:center;}
+  .cluster{background:#161d3a;border:1px solid #2a3566;border-radius:14px;padding:18px;
+    width:min(820px,96vw);}
+  .clabel{font-size:.78rem;color:#6b76a8;font-weight:700;margin-bottom:10px;}
+  .pods{display:flex;flex-wrap:wrap;gap:12px;min-height:90px;}
+  .pod{width:74px;height:74px;border-radius:12px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;font-size:.7rem;font-weight:700;cursor:pointer;
+    border:2px solid;transition:all .3s;position:relative;}
+  .pod.running{background:#13351f;border-color:#43c46a;color:#a6f0bf;}
+  .pod.pending{background:#3a3410;border-color:#e0c020;color:#f5e58c;animation:pulse 1s infinite;}
+  .pod.crashed{background:#3a1414;border-color:#f0556a;color:#ffb3bd;}
+  @keyframes pulse{50%{opacity:.5;}}
+  .pod .ico{font-size:1.4rem;}
+  .pod .x{position:absolute;top:2px;right:6px;font-size:.7rem;color:#9aa3c0;}
+  .pod.running:hover{filter:brightness(1.2);}
+  .status{margin-top:14px;font-size:.9rem;color:#9aa3c0;text-align:center;}
+  .status b{color:#7aa2ff;}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;justify-content:center;}
+  button.act{border:none;border-radius:9px;padding:11px 16px;font-weight:700;cursor:pointer;font-size:.84rem;}
+  .b-kill{background:#f0556a;color:#fff;} .b-node{background:#e0a020;color:#231a00;}
+  .b-reset{background:#2a3566;color:#fff;} button.act:hover{filter:brightness(1.1);}
+  .log{background:#0a0e1f;border:1px solid #2a3566;border-radius:10px;padding:12px 14px;
+    width:min(820px,96vw);font-family:Consolas,monospace;font-size:.8rem;min-height:90px;margin-top:14px;}
+  .log .g{color:#43c46a;} .log .y{color:#e0c020;} .log .r{color:#f0556a;} .log .d{color:#6b76a8;}
+</style>
+</head>
+<body>
+  <h1>☸️ Kubernetes Self-Healing & Auto-Scaling</h1>
+  <p class="sub">Kubernetes constantly compares <b>desired state</b> (what you asked for) with <b>actual state</b> (what's running) and fixes any difference. Break things below and watch it heal.</p>
+
+  <div class="analogy">
+    🏪 <b>Analogy:</b> Think of a shop manager told "always keep <b>3 staff</b> on the floor." If one goes home sick, the manager immediately calls a replacement. If the whole shop floor closes, they reopen it elsewhere with 3 staff again. You never manage individuals — you declare the <b>desired number</b>, and Kubernetes (the manager) makes reality match it. This is the <b>reconciliation loop</b>.
+  </div>
+
+  <div class="cluster">
+    <div class="desired">
+      <span>🎯 Desired replicas:</span>
+      <button id="minus">−</button>
+      <span class="n" id="want">3</span>
+      <button id="plus">+</button>
+      <span style="color:#6b76a8;font-size:.8rem">(like <code>replicas: 3</code> in a Deployment)</span>
+    </div>
+    <div class="clabel">🖥️ CLUSTER — actual running pods</div>
+    <div class="pods" id="pods"></div>
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="controls">
+    <button class="act b-kill" id="kill">💥 Crash a random pod</button>
+    <button class="act b-node" id="node">🔌 Simulate node failure (kill 2)</button>
+    <button class="act b-reset" id="reset">↻ Reset</button>
+  </div>
+
+  <div class="log" id="log"></div>
+
+<script>
+  let want=3, pods=[], idc=0;
+  const $=id=>document.getElementById(id);
+  function log(html){const l=$("log");l.innerHTML=`<div>${html}</div>`+l.innerHTML;}
+
+  function render(){
+    $("want").textContent=want;
+    $("pods").innerHTML=pods.map(p=>
+      `<div class="pod ${p.state}" data-id="${p.id}"><span class="x">app-${p.id}</span><span class="ico">📦</span><span>${p.state}</span></div>`
+    ).join("");
+    const running=pods.filter(p=>p.state==="running").length;
+    $("status").innerHTML=`Desired: <b>${want}</b> &nbsp;|&nbsp; Running: <b>${running}</b> &nbsp;|&nbsp; ${running===want?'✅ converged':'⚙️ reconciling…'}`;
+    document.querySelectorAll(".pod.running").forEach(el=>el.onclick=()=>crash(+el.dataset.id));
+  }
+
+  function reconcile(){
+    // remove crashed after a beat, then add pending to meet desired
+    setTimeout(()=>{
+      pods=pods.filter(p=>p.state!=="crashed");
+      render();
+      let running=pods.filter(p=>p.state==="running").length+pods.filter(p=>p.state==="pending").length;
+      while(running<want){ pods.push({id:++idc,state:"pending"}); running++; log('<span class="y">⚙️ Scheduler: starting new pod app-'+idc+' (Pending)…</span>'); }
+      // trim if too many
+      while(running>want){ const i=pods.findIndex(p=>p.state!=="crashed"); if(i>=0){log('<span class="d">↓ scaling down pod app-'+pods[i].id+'</span>');pods.splice(i,1);running--;} else break; }
+      render();
+      setTimeout(()=>{ pods.forEach(p=>{if(p.state==="pending"){p.state="running";}}); render();
+        log('<span class="g">✔ converged: '+want+'/'+want+' pods Running</span>'); },900);
+    },600);
+  }
+
+  function crash(id){
+    const p=pods.find(x=>x.id===id); if(!p||p.state!=="running")return;
+    p.state="crashed"; log('<span class="r">💥 pod app-'+id+' crashed!</span>'); render();
+    reconcile();
+  }
+
+  $("kill").onclick=()=>{const r=pods.filter(p=>p.state==="running");if(r.length)crash(r[Math.floor(r.length/2)].id);};
+  $("node").onclick=()=>{const r=pods.filter(p=>p.state==="running").slice(0,2);
+    if(!r.length)return; log('<span class="r">🔌 Node failed — 2 pods lost!</span>');
+    r.forEach(p=>p.state="crashed");render();reconcile();};
+  $("plus").onclick=()=>{want=Math.min(want+1,8);log('<span class="y">🎯 desired → '+want+' (you scaled up)</span>');render();reconcile();};
+  $("minus").onclick=()=>{want=Math.max(want-1,0);log('<span class="y">🎯 desired → '+want+' (you scaled down)</span>');render();reconcile();};
+  $("reset").onclick=()=>{want=3;pods=[];idc=0;$("log").innerHTML="";for(let i=0;i<3;i++)pods.push({id:++idc,state:"running"});render();log('<span class="d"># reset to 3 running pods</span>');};
+
+  for(let i=0;i<3;i++)pods.push({id:++idc,state:"running"});
+  render();
+  log('<span class="d"># 3 pods running. Try crashing one (click it) or scaling.</span>');
+</script>
+</body>
+</html>

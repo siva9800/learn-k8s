@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Kubernetes Architecture Explorer — Interactive</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Segoe UI',system-ui,sans-serif;background:#0b1021;color:#e6e9f5;
+    min-height:100vh;padding:22px;display:flex;flex-direction:column;align-items:center;}
+  h1{font-size:1.55rem;text-align:center;}
+  p.sub{color:#9aa3c0;max-width:720px;text-align:center;margin:6px 0 16px;}
+  .analogy{background:#161d3a;border:1px solid #2a3566;border-left:4px solid #5b8def;
+    border-radius:8px;padding:12px 16px;max-width:800px;font-size:.88rem;margin-bottom:18px;}
+  .analogy b{color:#7aa2ff;}
+  .wrap{display:flex;gap:20px;flex-wrap:wrap;justify-content:center;max-width:1050px;width:100%;}
+  .diagram{flex:1;min-width:320px;}
+  .plane{border-radius:14px;padding:14px;margin-bottom:14px;border:1px solid;}
+  .cp{background:#1a1430;border-color:#7c5cff;}
+  .wn{background:#10231a;border-color:#43c46a;}
+  .plane h3{font-size:.95rem;margin-bottom:10px;}
+  .cp h3{color:#b69dff;} .wn h3{color:#7ee5a0;}
+  .comps{display:flex;flex-wrap:wrap;gap:9px;}
+  .comp{padding:9px 12px;border-radius:9px;font-size:.8rem;font-weight:600;cursor:pointer;
+    border:1px solid #3a4680;background:#0e1430;color:#cfd6f5;transition:all .2s;}
+  .comp:hover{transform:translateY(-2px);}
+  .comp.active{background:#5b8def;color:#fff;border-color:#7aa2ff;box-shadow:0 0 14px rgba(91,141,239,.5);}
+  .node-box{background:#0e1430;border:1px dashed #2a4a38;border-radius:10px;padding:10px;margin-top:8px;}
+  .node-box .nt{font-size:.72rem;color:#6b9a7e;margin-bottom:7px;font-weight:700;}
+  .panel{flex:1;min-width:300px;background:#161d3a;border:1px solid #2a3566;border-radius:14px;padding:20px;align-self:flex-start;}
+  .panel .tag{display:inline-block;font-size:.7rem;font-weight:700;padding:3px 10px;border-radius:999px;
+    background:#2a3566;color:#9bb0ff;margin-bottom:10px;text-transform:uppercase;}
+  .panel h2{font-size:1.25rem;margin-bottom:8px;}
+  .panel p{color:#aab2d5;line-height:1.6;font-size:.92rem;margin-bottom:10px;}
+  .panel .an{background:#0e1430;border-left:3px solid #5b8def;padding:8px 12px;border-radius:6px;font-size:.85rem;color:#cfd6f5;}
+</style>
+</head>
+<body>
+  <h1>☸️ Kubernetes Architecture Explorer</h1>
+  <p class="sub">Click any component to learn what it does. The <b style="color:#b69dff">Control Plane</b> is the brain that makes decisions; the <b style="color:#7ee5a0">Worker Nodes</b> are the muscle that runs your apps.</p>
+
+  <div class="analogy">
+    🏥 <b>Analogy:</b> A Kubernetes cluster is like a <b>hospital</b>. The <b>Control Plane</b> is the administration & doctors' office (it decides who goes where and keeps records); the <b>Worker Nodes</b> are the hospital wards where patients (your app pods) actually stay. The <b>API server</b> is the reception desk everyone must go through, and <b>etcd</b> is the master records room.
+  </div>
+
+  <div class="wrap">
+    <div class="diagram">
+      <div class="plane cp">
+        <h3>🧠 Control Plane (the brain)</h3>
+        <div class="comps">
+          <div class="comp" data-k="api">kube-apiserver</div>
+          <div class="comp" data-k="etcd">etcd</div>
+          <div class="comp" data-k="sched">kube-scheduler</div>
+          <div class="comp" data-k="cm">controller-manager</div>
+        </div>
+      </div>
+      <div class="plane wn">
+        <h3>💪 Worker Nodes (the muscle)</h3>
+        <div class="node-box">
+          <div class="nt">🖥️ Node 1</div>
+          <div class="comps">
+            <div class="comp" data-k="kubelet">kubelet</div>
+            <div class="comp" data-k="proxy">kube-proxy</div>
+            <div class="comp" data-k="runtime">container runtime</div>
+            <div class="comp" data-k="pod">📦 pods</div>
+          </div>
+        </div>
+        <div class="node-box">
+          <div class="nt">🖥️ Node 2</div>
+          <div class="comps">
+            <div class="comp" data-k="kubelet">kubelet</div>
+            <div class="comp" data-k="proxy">kube-proxy</div>
+            <div class="comp" data-k="runtime">container runtime</div>
+            <div class="comp" data-k="pod">📦 pods</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <span class="tag" id="ptag">Start</span>
+      <h2 id="ptitle">👈 Click a component</h2>
+      <p id="pdesc">Each piece of Kubernetes has one job. Click any box on the left to see what it does, in plain English, with an analogy.</p>
+      <div class="an" id="pan">Tip: start with <b>kube-apiserver</b> — everything talks through it.</div>
+    </div>
+  </div>
+
+<script>
+  const info={
+    api:{tag:"Control Plane",title:"🚪 kube-apiserver",desc:"The front door to Kubernetes. Every command (kubectl), every component, and every request goes through it. It validates requests and updates the cluster's records.",an:"Analogy: the hospital reception desk — nobody gets in or changes anything without going through it."},
+    etcd:{tag:"Control Plane",title:"🗄️ etcd",desc:"The cluster's database. It stores the entire desired and current state of everything — every pod, config, and secret — as key-value data. If etcd is lost, the cluster's memory is lost.",an:"Analogy: the master records room. Lose it and nobody remembers who's supposed to be where."},
+    sched:{tag:"Control Plane",title:"📋 kube-scheduler",desc:"Decides WHICH node a new pod should run on, based on available CPU/RAM, rules, and constraints. It picks the best home for each pod.",an:"Analogy: the bed-assignment coordinator — finds the right ward with enough space for each new patient."},
+    cm:{tag:"Control Plane",title:"🔁 controller-manager",desc:"Runs the reconciliation loops that keep actual state matching desired state. E.g. if you want 3 pods and one dies, a controller notices and creates a replacement.",an:"Analogy: the floor manager who constantly checks 'do we have the right number of staff?' and fixes gaps."},
+    kubelet:{tag:"Worker Node",title:"🤝 kubelet",desc:"The agent on every worker node. It receives pod instructions from the control plane and makes sure the containers are actually running and healthy on its node.",an:"Analogy: the head nurse on each ward — takes orders from admin and ensures patients are actually cared for."},
+    proxy:{tag:"Worker Node",title:"🔀 kube-proxy",desc:"Handles networking on each node. It routes traffic to the right pods and makes Services reachable, load-balancing across pod copies.",an:"Analogy: the internal phone operator — connects calls to the right room, even as people move."},
+    runtime:{tag:"Worker Node",title:"⚙️ container runtime",desc:"The software that actually runs containers (containerd, CRI-O). Kubernetes tells it to pull images and start/stop containers. (Docker's shim was removed in v1.24.)",an:"Analogy: the actual hands doing the work the manager ordered."},
+    pod:{tag:"Worker Node",title:"📦 Pods",desc:"The smallest deployable unit — usually one container plus its shared network and storage. Pods are where YOUR application actually runs.",an:"Analogy: the patients themselves — the reason the whole hospital exists."},
+  };
+  const els={tag:document.getElementById("ptag"),title:document.getElementById("ptitle"),desc:document.getElementById("pdesc"),an:document.getElementById("pan")};
+  document.querySelectorAll(".comp").forEach(c=>c.onclick=()=>{
+    document.querySelectorAll(".comp").forEach(x=>x.classList.remove("active"));
+    document.querySelectorAll(`.comp[data-k="${c.dataset.k}"]`).forEach(x=>x.classList.add("active"));
+    const i=info[c.dataset.k];
+    els.tag.textContent=i.tag;els.title.textContent=i.title;els.desc.textContent=i.desc;els.an.innerHTML=i.an;
+  });
+</script>
+</body>
+</html>

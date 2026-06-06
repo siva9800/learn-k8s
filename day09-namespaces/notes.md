@@ -1,4 +1,47 @@
-# Day 08 - Namespaces
+# Day 09 - Namespaces
+
+> **Goal:** Split one cluster into separate, organized spaces so teams and apps don't step on each other.
+
+## Learning Objectives
+- Explain what a Namespace is and why it exists
+- List the default namespaces Kubernetes ships with
+- Create, use, switch, and delete namespaces
+- Understand cross-namespace DNS names
+- Know what namespaces do **not** do (they're not a network security boundary)
+
+---
+
+## Real-World Analogy: Apartments in One Building
+
+Picture a single apartment building. The **building** is your Kubernetes cluster. Inside are many **apartments** - each one is a **Namespace**.
+
+- Every apartment has its own furniture, residents, and mess - without disturbing the neighbors.
+- Two apartments can each have a "John" living there; the names don't clash because they're in different units.
+- The building still shares infrastructure (plumbing, electricity) - like the cluster's Nodes and control plane that everyone shares.
+
+```mermaid
+flowchart TB
+    subgraph Building[Cluster - one building]
+        subgraph A1[Namespace: frontend]
+            A1P[Pod: web]
+            A1S[Service: web-svc]
+        end
+        subgraph A2[Namespace: backend]
+            A2P[Pod: api]
+            A2S[Service: api-svc]
+        end
+        subgraph A3[Namespace: kube-system shared utilities]
+            DNS[CoreDNS]
+            Proxy[kube-proxy]
+        end
+    end
+```
+
+> `frontend` and `backend` can each contain objects with the same name. Because they live in different namespaces, **the names don't collide**.
+
+> Namespaces are **not** a security boundary by themselves. By default, a Pod in one namespace can still reach a Service in another. Real network isolation needs **NetworkPolicies**.
+
+---
 
 ## Why Do We Need Namespaces?
 
@@ -173,6 +216,12 @@ Pods in different namespaces **can** communicate using the full DNS name:
 **Within same namespace:** `http://api-svc:8080` (short name works)
 **Across namespaces:** `http://api-svc.backend:8080` (must include namespace)
 
+```mermaid
+flowchart LR
+    P[Pod in 'frontend'] -->|api-svc| S1[Service api-svc<br/>same namespace]
+    P -->|api-svc.backend.svc.cluster.local| S2[Service api-svc<br/>in 'backend']
+```
+
 ---
 
 ## When to Use Namespaces
@@ -236,6 +285,34 @@ kubectl get all -A
 # Describe a namespace
 kubectl describe namespace dev
 ```
+
+---
+
+## Common Mistakes
+
+1. **Deleting a namespace to "clean up one app."** `kubectl delete namespace` wipes **every** object inside it - Deployments, Services, Secrets, everything.
+2. **Forgetting `-n` and looking in the wrong place.** `kubectl get pods` only shows the `default` namespace; your Pods may be in `dev`. Use `-A` to see all.
+3. **Assuming namespaces isolate network traffic.** They don't by default - you need NetworkPolicies for real isolation.
+4. **Cross-namespace calls using only the short name.** `api-svc` resolves only in the *same* namespace. From elsewhere use `api-svc.<namespace>`.
+5. **Deploying your apps into `kube-system`.** That namespace is for core cluster components - keep your workloads out.
+
+---
+
+## Quick Self-Check
+
+1. In the apartment analogy, what is the *building* and what is an *apartment*?
+2. Which namespace do your objects go into if you don't specify one?
+3. Can two namespaces each contain a Service named `api-svc`? Why or why not?
+4. What does `kubectl delete namespace dev` actually delete?
+5. From a Pod in `frontend`, what DNS name reaches Service `api-svc` in `backend`?
+
+---
+
+## Summary
+
+**Namespaces** split a single cluster into isolated "apartments" for organization, name separation, access control (RBAC), and resource quotas. They are a logical/organizational boundary - **not** a network security boundary on their own. Use `-n` (or `-A`) and cross-namespace DNS like `service.namespace` to work across them.
+
+Next up → [Day 10 - ConfigMaps & Secrets](../day10-configmaps-secrets/notes.md)
 
 ---
 

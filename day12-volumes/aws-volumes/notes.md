@@ -1,19 +1,53 @@
 # AWS Volumes for Kubernetes (EBS & EFS) - Production Guide
 
+> **Goal:** Give your EKS pods real, durable AWS storage - fast single-node disks with EBS, or shared multi-node file storage with EFS - using the CSI drivers and dynamic provisioning.
+
+## Learning Objectives
+
+By the end you will be able to:
+
+1. Choose between EBS (block, RWO) and EFS (file, RWX) for a given workload.
+2. Install and verify the EBS and EFS CSI drivers on EKS.
+3. Write StorageClass + PVC YAML that dynamically provisions AWS storage.
+4. Understand AZ-locking, volume resizing, and snapshots for backup.
+
+## Real-World Analogy
+
+- **EBS is like an external USB SSD.** Super fast, but only **one computer** can plug into it at a time, and it lives in **one room (Availability Zone)** - you can't carry it to a computer in another building.
+- **EFS is like a shared network drive at the office.** A bit slower, but **everyone** can read and write to it **at the same time**, from **any building (multi-AZ)**, and it **grows automatically** as you add files.
+- The **CSI driver** is the **device driver** that teaches Kubernetes how to plug these disks in and out automatically - without it, you'd be creating volumes by hand in the AWS console.
+
+## How AWS Storage Plugs Into Kubernetes
+
+```mermaid
+flowchart LR
+    PVC["PVC<br/>(request slip)"] --> SC["StorageClass<br/>ebs-gp3 / efs-sc"]
+    SC --> CSI["CSI Driver<br/>ebs.csi.aws.com /<br/>efs.csi.aws.com"]
+    CSI -->|creates &amp; attaches| AWS[("AWS Storage<br/>EBS volume (1 AZ)<br/>or EFS filesystem (multi-AZ)")]
+    AWS --> PV["PV<br/>(auto-created)"]
+    PV --> POD["Pod mounts it"]
+
+    style PVC fill:#e3f2fd,stroke:#1e88e5
+    style SC fill:#fff3e0,stroke:#fb8c00
+    style CSI fill:#ede7f6,stroke:#5e35b1
+    style AWS fill:#f3e5f5,stroke:#8e24aa
+    style PV fill:#e8f5e9,stroke:#43a047
+```
+
 ## Why Not hostPath in Production?
 
 ```
 hostPath problems:
-  ❌ Data is on ONE node only → pod moves to another node → data LOST
-  ❌ No replication → node disk fails → data GONE forever
-  ❌ No dynamic provisioning → admin must manually create directories
-  ❌ Security risk → pod can access any path on the node
+   Data is on ONE node only → pod moves to another node → data LOST
+   No replication → node disk fails → data GONE forever
+   No dynamic provisioning → admin must manually create directories
+   Security risk → pod can access any path on the node
 
 AWS volumes solve all of this:
-  ✅ EBS: Block storage, automatically attaches to the right node
-  ✅ EFS: Shared file storage, multiple pods/nodes can read-write
-  ✅ Dynamic provisioning with StorageClass
-  ✅ Automatic snapshots, encryption, high availability
+   EBS: Block storage, automatically attaches to the right node
+   EFS: Shared file storage, multiple pods/nodes can read-write
+   Dynamic provisioning with StorageClass
+   Automatic snapshots, encryption, high availability
 ```
 
 ---
@@ -41,7 +75,7 @@ AWS volumes solve all of this:
 │  │ [Different EBS] │               │   │             │         │
 │  └─────────────────┘               └───┼─────────────┘         │
 │                                        │                       │
-│  Pod-A and Pod-B                       ▼                       │
+│  Pod-A and Pod-B                                              │
 │  CANNOT share the                  ┌───────────┐              │
 │  same EBS volume!                  │  EFS      │              │
 │                                    │  (shared) │              │
@@ -112,14 +146,21 @@ The EBS CSI Driver needs permission to:
   - Attach/Detach volumes to EC2 instances
   - Create snapshots
 
-This is done via IAM Role for Service Account (IRSA):
+This is done via IAM Role for Service Account (IRSA). IRSA requires an OIDC
+provider on the cluster, so associate one first if you have not already:
+
+eksctl utils associate-iam-oidc-provider \
+  --cluster my-cluster \
+  --region ap-south-1 \
+  --approve
 
 eksctl create iamserviceaccount \
   --cluster my-cluster \
   --namespace kube-system \
   --name ebs-csi-controller-sa \
   --attach-policy-arn arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy \
-  --approve
+  --approve \
+  --region ap-south-1
 ```
 
 ### EBS Volume Types
@@ -384,10 +425,12 @@ kubectl apply -f ebs-storageclass.yaml
 # storageclass.storage.k8s.io/ebs-gp3 created
 
 kubectl get sc
-# NAME            PROVISIONER       RECLAIMPOLICY   VOLUMEBINDINGMODE       AGE
-# ebs-gp3         ebs.csi.aws.com   Delete          WaitForFirstConsumer    5s
-# gp2 (default)   kubernetes.io/aws-ebs   Delete    WaitForFirstConsumer    7d
+# NAME            PROVISIONER             RECLAIMPOLICY   VOLUMEBINDINGMODE       AGE
+# ebs-gp3         ebs.csi.aws.com         Delete          WaitForFirstConsumer    5s
+# gp2 (default)   kubernetes.io/aws-ebs   Delete          WaitForFirstConsumer    7d
 ```
+
+Note on that default `gp2` class: `kubernetes.io/aws-ebs` is the **legacy in-tree provisioner**, which has been removed from modern Kubernetes/EKS. Always create and use a StorageClass backed by the modern CSI driver `ebs.csi.aws.com` (like `ebs-gp3` above). Do not rely on the old in-tree `kubernetes.io/aws-ebs` provisioner for new work.
 
 #### Step 2: Create a PVC
 
@@ -540,9 +583,9 @@ kubectl get pvc mysql-ebs-pvc
 ### EBS with Multiple Replicas (Important!)
 
 ```
-QUESTION: What if I have 3 replicas in a Deployment — can all 3 use the same EBS PVC?
+QUESTION: What if I have 3 replicas in a Deployment - can all 3 use the same EBS PVC?
 
-ANSWER: NO! EBS is ReadWriteOnce (RWO) — only ONE node can mount it at a time.
+ANSWER: NO! EBS is ReadWriteOnce (RWO) - only ONE node can mount it at a time.
 ```
 
 #### Scenario 1: Deployment with 3 replicas + 1 EBS PVC
@@ -576,7 +619,7 @@ Wait... actually if ALL 3 pods land on the SAME node, they CAN all mount it.
 But Kubernetes spreads pods across nodes, so in practice it fails.
 ```
 
-#### Scenario 2: The RIGHT way — StatefulSet (each replica gets its OWN EBS)
+#### Scenario 2: The RIGHT way - StatefulSet (each replica gets its OWN EBS)
 
 ```
 For databases where each replica needs its own storage (MySQL replicas,
@@ -685,7 +728,7 @@ Solution: Use EFS (ReadWriteMany) instead of EBS!
 
 ---
 
-### Pod Rescheduled to Another Node — What Happens to EBS?
+### Pod Rescheduled to Another Node - What Happens to EBS?
 
 ```
 QUESTION: If a pod is deleted/crashes and gets scheduled on a DIFFERENT node,
@@ -798,7 +841,7 @@ kubectl delete pvc mysql-ebs-pvc    # ← This also deletes the EBS volume (recl
 kubectl delete sc ebs-gp3
 ```
 
-### Static vs Dynamic — When to Use What
+### Static vs Dynamic - When to Use What
 
 ```
 ┌───────────────────────────┬──────────────────────────────────────────┐
@@ -850,15 +893,29 @@ Use cases:
 ### Prerequisites
 
 ```bash
+# 0. Like the EBS driver, the EFS CSI driver needs an IAM role via IRSA.
+#    (Your cluster must already have an OIDC provider associated - see the EBS
+#     IRSA section above, or eks-demo.md, for the full IRSA/OIDC setup.)
+eksctl create iamserviceaccount \
+  --cluster my-cluster \
+  --namespace kube-system \
+  --name efs-csi-controller-sa \
+  --attach-policy-arn arn:aws:iam::aws:policy/service-role/AmazonEFSCSIDriverPolicy \
+  --approve \
+  --region ap-south-1
+
 # 1. Install EFS CSI Driver
 helm repo add aws-efs-csi-driver https://kubernetes-sigs.github.io/aws-efs-csi-driver/
 helm install aws-efs-csi-driver aws-efs-csi-driver/aws-efs-csi-driver \
-  --namespace kube-system
+  --namespace kube-system \
+  --set controller.serviceAccount.create=false \
+  --set controller.serviceAccount.name=efs-csi-controller-sa
 
-# OR via EKS add-on:
+# OR via EKS add-on (pass the IRSA role ARN created above):
 aws eks create-addon \
   --cluster-name my-cluster \
-  --addon-name aws-efs-csi-driver
+  --addon-name aws-efs-csi-driver \
+  --region ap-south-1
 
 # 2. Verify
 kubectl get pods -n kube-system -l app.kubernetes.io/name=aws-efs-csi-driver
@@ -1315,6 +1372,39 @@ TIP: Use EFS Intelligent-Tiering to auto-move cold files to EFS-IA
 ```
 
 ---
+
+## Common Mistakes
+
+1. **Trying to use EBS with `ReadWriteMany`.** EBS is block storage - one node at a time (RWO). For shared multi-pod access use **EFS** (RWX).
+2. **Forgetting `WaitForFirstConsumer`, causing AZ mismatch.** With `Immediate` binding the EBS volume may be created in a different AZ than the pod's node, leaving the pod stuck. Always use `WaitForFirstConsumer` for EBS.
+3. **Forgetting the CSI driver or its IAM (IRSA) role.** Without the EBS/EFS CSI driver installed and its IAM role attached, PVCs sit `Pending` and pods stay in `ContainerCreating`. Verify with `kubectl get pods -n kube-system | grep csi`.
+4. **Leaving `reclaimPolicy: Delete` on production databases.** Deleting the PVC then destroys the EBS volume and all data. Use `Retain` for anything important.
+5. **Pointing 3 Deployment replicas at one EBS PVC.** Only one pod attaches; the rest fail with a Multi-Attach error. Use a StatefulSet with `volumeClaimTemplates` (each replica its own EBS) or EFS for shared data.
+
+## Quick Self-Check
+
+1. Which AWS storage type supports `ReadWriteMany`, and why can't EBS do it?
+2. Why is `volumeBindingMode: WaitForFirstConsumer` recommended for EBS StorageClasses?
+3. A pod is stuck in `ContainerCreating` and its PVC is `Pending`. Name two likely causes.
+4. You need 3 MySQL replicas, each with its own disk. Which workload type and which volume field do you use?
+5. How do you grow an EBS-backed PVC, and what StorageClass setting must be enabled first?
+
+<details>
+<summary>Answers</summary>
+
+1. **EFS** (NFS-based file storage). EBS is block storage that attaches to only one node at a time, so it's limited to RWO.
+2. It delays EBS creation until the pod is scheduled, so the volume lands in the **same AZ** as the node - avoiding AZ-mismatch attach failures.
+3. Any two of: CSI driver not installed, IAM/IRSA role missing, no matching StorageClass, or an AZ mismatch.
+4. A **StatefulSet** with `volumeClaimTemplates` - each replica gets its own PVC and its own EBS volume.
+5. Edit the PVC's requested storage to a larger value (`kubectl edit pvc` or `kubectl patch`); the StorageClass must have `allowVolumeExpansion: true` (size can only increase).
+
+</details>
+
+## Summary
+
+On EKS, use **EBS** for fast single-node storage (databases, RWO) and **EFS** for shared multi-node file storage (RWX, multi-AZ, auto-scaling). Both rely on a **CSI driver** plus an IAM role to provision storage dynamically from a StorageClass + PVC. Remember EBS is **AZ-locked** (use `WaitForFirstConsumer`), set `reclaimPolicy: Retain` for important data, enable `allowVolumeExpansion` for growth, use StatefulSets for per-replica DB disks, and clean up orphaned volumes to avoid surprise bills.
+
+**Next up →** [NFS Volumes (On-Prem)](../nfs-volumes/notes.md) for the same patterns without a cloud provider.
 
 ## Key Takeaways
 

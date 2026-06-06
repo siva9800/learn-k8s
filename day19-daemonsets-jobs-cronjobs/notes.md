@@ -1,5 +1,39 @@
 # Day 19 - DaemonSets, Jobs & CronJobs
 
+> **Goal:** Learn the three workload types Deployments can't do well - running one pod on **every node** (DaemonSet), running a task **once to completion** (Job), and running a task **on a schedule** (CronJob).
+
+## Learning Objectives
+
+By the end of this lesson you will be able to:
+
+1. Explain when to use a DaemonSet, a Job, or a CronJob instead of a Deployment.
+2. Write and apply a DaemonSet, including limiting it to specific nodes.
+3. Write Jobs with `completions`, `parallelism`, and `backoffLimit`.
+4. Write CronJobs with correct cron syntax and `concurrencyPolicy`.
+5. Use the right `restartPolicy` for batch workloads.
+
+## Real-World Analogy: A Building's Staff
+
+Think of your Kubernetes cluster as an **office building**, where each **node** is a **floor**.
+
+- **Deployment** = the **call-center team**. You decide "I want 10 agents," and managers keep exactly 10 working at all times, anywhere there's a free desk. (Run N copies, forever.)
+- **DaemonSet** = the **security guard on every floor**. You don't pick a number - the rule is simply "one guard per floor." Open a new floor (add a node)? A guard automatically appears. Close a floor? The guard leaves. (One pod per node, automatic.)
+- **Job** = a **one-off contractor** hired to "move these boxes, then go home." They show up, finish the task, and leave. They don't hang around. (Run once to completion.)
+- **CronJob** = the **alarm clock / cleaning schedule**. "Every night at 2 AM, send in the cleaning crew." The clock fires on schedule and dispatches a fresh one-off crew (a Job) each time. (Run on a schedule.)
+
+```mermaid
+flowchart TD
+    subgraph Cluster[" Cluster (the building)"]
+        direction TB
+        D["Deployment<br/>call-center team<br/>= N pods anywhere"]
+        DS["DaemonSet<br/>1 security guard<br/>per floor (node)"]
+        J["Job<br/>one-off contractor<br/>runs once, then stops"]
+        CJ["CronJob<br/>alarm clock<br/>fires on schedule"]
+    end
+    CJ -->|"at 2 AM creates a"| J
+    J -->|"creates"| POD["Pod runs to completion"]
+```
+
 ## The Big Picture
 
 So far, we've used **Deployments** to run our applications. Deployments are great for stateless apps where you decide how many replicas you want. But what about these scenarios?
@@ -411,6 +445,8 @@ CronJob (schedule: "0 2 * * *")
 | `0 9 1 * *` | 1st of every month at 9:00 AM |
 | `30 8 * * 1-5` | Weekdays at 8:30 AM |
 
+> **Reading the fields:** the order is `minute hour day-of-month month day-of-week`. A `*` means "every value" for that field. For example, `30 8 * * 1-5` is minute 30, hour 8, any day-of-month, any month, days-of-week 1 through 5 (Monday to Friday).
+
 ### CronJob YAML Example
 
 ```yaml
@@ -573,6 +609,47 @@ kubectl patch cronjob db-backup -p '{"spec":{"suspend":false}}'
 
 ---
 
+## Common Mistakes
+
+1. **Using `restartPolicy: Always` in a Job or CronJob pod.** Batch pods must finish. Only `Never` or `OnFailure` are allowed - `Always` is rejected because the pod could never be considered "done."
+2. **Adding `replicas` to a DaemonSet.** There is no `replicas` field - the count is always "one per matching node." Use `nodeSelector`/affinity to limit *which* nodes, not a number.
+3. **Misreading the cron day-of-week field.** It's `minute hour day-of-month month day-of-week`, where Sunday = 0 (and 7 also = Sunday). `0 9 * * 1-5` is weekdays at 9 AM, *not* `0 9 1-5 * *` (which would be the 1st to 5th of the month).
+4. **Expecting overlapping CronJob runs by default.** The default `concurrencyPolicy` is `Allow`, so a slow job can pile up. Use `Forbid` or `Replace` for tasks that must not overlap (e.g. backups).
+5. **Completed Jobs/pods accumulating forever.** Finished Jobs are kept until you delete them. Set `ttlSecondsAfterFinished` on Jobs, and `successfulJobsHistoryLimit`/`failedJobsHistoryLimit` on CronJobs, to auto-clean.
+
+## Quick Self-Check
+
+1. You add a brand-new node to the cluster. What does a DaemonSet do, and what does a Deployment do?
+2. Which two `restartPolicy` values are valid for a Job, and which one is forbidden?
+3. What does `completions: 6, parallelism: 3` mean in plain English?
+4. Write the cron schedule for "every weekday at 8:30 AM."
+5. A CronJob's previous run is still going when the next is due, and you must never run two at once. Which `concurrencyPolicy` do you set?
+
+<details>
+<summary>Answers</summary>
+
+1. The **DaemonSet** automatically schedules one pod onto the new node; the **Deployment** does nothing (its replica count is unchanged).
+2. Valid: `Never` and `OnFailure`. Forbidden: `Always`.
+3. Run 6 successful pods in total, with up to 3 running at the same time (so roughly 2 waves of 3).
+4. `30 8 * * 1-5`.
+5. `Forbid` (skips the new run while the old one is still active).
+
+</details>
+
+---
+
+## Summary
+
+- **DaemonSet** = one pod per node, automatically (the security guard on every floor) - great for log collectors, monitoring, and CNI plugins. No `replicas` field.
+- **Job** = run a task once to completion (the one-off contractor); tune with `completions`, `parallelism`, and `backoffLimit`.
+- **CronJob** = a Job on a schedule (the alarm clock) using `minute hour day month weekday` syntax; control overlap with `concurrencyPolicy`.
+- Batch workloads must use `restartPolicy: Never` or `OnFailure`, never `Always`.
+- Clean up finished work with `ttlSecondsAfterFinished` and the CronJob history limits.
+
+**Next up ->** [Day 20 - Network Policies](../day20-network-policies/notes.md)
+
+---
+
 ## Key Takeaways
 
 1. **DaemonSet** = one pod per node, automatically. Perfect for node-level agents like log collectors, monitoring, and network plugins
@@ -600,4 +677,4 @@ kubectl patch cronjob db-backup -p '{"spec":{"suspend":false}}'
 ---
 
 **Previous:** [<-- Day 18 - Ingress Demo](../day18-ingress-demo/notes.md)
-**Next:** [Day 20 - Resource Management & Autoscaling -->](../day20-resource-management/notes.md)
+**Next:** [Day 20 - Network Policies -->](../day20-network-policies/notes.md)

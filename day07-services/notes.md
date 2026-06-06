@@ -1,5 +1,33 @@
 # Day 07 - Services & Networking
 
+> **Goal:** Give your constantly-changing Pods a single, stable address - and load-balance traffic across them.
+
+## Learning Objectives
+- Explain why Pods need a Service in front of them
+- Describe the three main Service types: **ClusterIP**, **NodePort**, **LoadBalancer**
+- Understand how a Service finds Pods using **label selectors**
+- Tell apart `port`, `targetPort`, and `nodePort`
+- Write, apply, and inspect a Service with `kubectl`
+
+---
+
+## Real-World Analogy: The Pizza Shop Phone Number
+
+Imagine a pizza shop with several delivery drivers. Each driver has their **own personal phone**, and those phones change all the time - drivers quit, new ones get hired, phones get replaced.
+
+If you, the customer, had to memorize every driver's personal number, you'd be lost the moment anything changed.
+
+Instead, the shop gives you **one stable number** to call: the front desk. You call that one number, and the front desk routes your order to whichever driver is free right now.
+
+In Kubernetes:
+- **Drivers** = your Pods (created and destroyed constantly, each with a new IP).
+- **The shop's front-desk number** = the **Service** (one stable address that never changes).
+- **The front desk knowing who works there today** = the Service's **selector** matching Pod **labels**.
+
+> Pods are disposable; their IPs change on every restart. A **Service** is the permanent "phone number" that always reaches the right Pods.
+
+---
+
 ## The Problem - Why Do We Need Services?
 
 From Day 06, you have a Deployment running 3 nginx pods. But:
@@ -59,9 +87,35 @@ selector:
 # Pods without this label are ignored
 ```
 
+```mermaid
+flowchart TD
+    Client([Other Pod / User]) -->|calls stable Service name| SVC[Service<br/>selector: app=web]
+    SVC -->|label matches| P1[Pod<br/>app=web]
+    SVC -->|label matches| P2[Pod<br/>app=web]
+    SVC -->|label matches| P3[Pod<br/>app=web]
+    P4[Pod<br/>app=db]
+    SVC -.->|no match, ignored| P4
+```
+
+> If the Service `selector` does not EXACTLY match the Pods' `labels`, the Service ends up with **no endpoints** and traffic goes nowhere. This is the #1 beginner bug - check it with `kubectl get endpoints <svc>`.
+
 ---
 
 ## Types of Services
+
+```mermaid
+flowchart LR
+    Internal([Inside cluster]) --> CIP
+    NodeUser([Outside via Node IP]) --> NP
+    NetUser([Public internet]) --> LB
+    subgraph Cluster[Kubernetes Cluster]
+        CIP[ClusterIP<br/>internal only] --> Pods[(Pods)]
+        NP[NodePort<br/>NodeIP : 30000-32767] --> Pods
+        LB[LoadBalancer<br/>cloud public IP] --> Pods
+    end
+```
+
+> Each type **builds on** the previous one: a NodePort also gets a ClusterIP, and a LoadBalancer also gets a NodePort + ClusterIP.
 
 ### 1. ClusterIP (Default) - Internal Communication
 
@@ -78,7 +132,7 @@ selector:
 │                       │     │     │               │
 │                      Pod   Pod   Pod              │
 │                                                    │
-│  ⚠️ NOT accessible from outside the cluster       │
+│   NOT accessible from outside the cluster       │
 └────────────────────────────────────────────────────┘
 ```
 
@@ -203,14 +257,13 @@ spec:
 
 ```yaml
 ports:
-  - port: 80          # ① Service port (what other services use)
-    targetPort: 8080   # ② Container port (where your app listens)
-    nodePort: 30080    # ③ Node port (external access, NodePort only)
+  - port: 80          #  Service port (what other services use)
+    targetPort: 8080   #  Container port (where your app listens)
+    nodePort: 30080    #  Node port (external access, NodePort only)
 ```
 
 ```
-External User → NodePort(30080) → Service Port(80) → Container Port(8080)
-                    ③                    ①                    ②
+External User -> NodePort(30080) -> Service Port(80) -> Container Port(8080)
 ```
 
 If `targetPort` is not specified, it defaults to the same value as `port`.
@@ -319,6 +372,34 @@ kubectl get endpoints backend
 # Delete a service
 kubectl delete svc backend
 ```
+
+---
+
+## Common Mistakes
+
+1. **Selector / label mismatch.** `spec.selector` must exactly match the Pods' `metadata.labels`. A typo means zero endpoints and "connection refused." Confirm with `kubectl get endpoints <svc>`.
+2. **Confusing `port` and `targetPort`.** `port` is what the Service listens on; `targetPort` is the port **inside the container**. They are often different.
+3. **Expecting ClusterIP to work from your laptop.** ClusterIP is **internal only** - reach it via NodePort, LoadBalancer, or `kubectl port-forward`.
+4. **Picking a `nodePort` outside 30000 - 32767.** Values outside this range are rejected.
+5. **Using `type: LoadBalancer` on a local cluster** (Minikube/kind) and expecting a public IP - it stays `<pending>` without `minikube tunnel` or a cloud provider.
+
+---
+
+## Quick Self-Check
+
+1. Why can't you reliably talk to a Pod by its IP address directly?
+2. How does a Service know which Pods to send traffic to?
+3. What is the default Service type, and who can reach it?
+4. What's the difference between `port` and `targetPort`?
+5. Your Service shows no endpoints. What's the likely cause, and which command confirms it?
+
+---
+
+## Summary
+
+A **Service** gives a stable IP + DNS name to a constantly-changing set of Pods and load-balances across them. It finds Pods via **label selectors**. The three core types: **ClusterIP** (internal), **NodePort** (external via Node IP), **LoadBalancer** (external via cloud LB). Remember `port` (service) vs `targetPort` (container) vs `nodePort` (external).
+
+Next up → [Day 08 - Services Demo](../day08-services-demo/notes.md)
 
 ---
 

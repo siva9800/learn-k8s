@@ -1,5 +1,25 @@
 # NFS Volumes for Kubernetes (On-Premises) - Production Guide
 
+> **Goal:** Set up shared, network-based storage for an on-prem Kubernetes cluster using NFS - so multiple pods on different nodes can read and write the same files.
+
+## Learning Objectives
+
+By the end you will be able to:
+
+1. Explain why on-prem clusters need shared network storage and where NFS fits.
+2. Install and configure an NFS server and the NFS client on worker nodes.
+3. Use NFS in Kubernetes three ways: direct volume, manual PV/PVC, and dynamic provisioning.
+4. Apply security and HA best practices, and troubleshoot common NFS errors.
+
+## Real-World Analogy
+
+NFS is like a **shared filing cabinet in the middle of the office**.
+
+- The **NFS server** is the filing cabinet itself - one machine that physically holds all the files.
+- Each **worker node** is a desk. To use the cabinet, every desk needs a **key (the `nfs-common` client package)** - without the key, a desk simply can't open the drawer (the pod gets stuck in `ContainerCreating`).
+- Because everyone shares the same cabinet, any pod on any node sees the **same files** - that's `ReadWriteMany`.
+- The catch: if that single cabinet catches fire (the NFS server dies), **everyone loses access**. That's why production needs a high-availability plan.
+
 ## Why NFS for On-Prem Kubernetes?
 
 ```
@@ -37,6 +57,32 @@ Options for on-prem shared storage:
 
 ## How NFS Works with Kubernetes
 
+```mermaid
+flowchart TD
+    subgraph SERVER[" NFS Server (dedicated machine)"]
+        DIR["/srv/nfs/k8s-data<br/>shared directory"]
+    end
+    SERVER -. network port 2049 .-> N1
+    SERVER -. network port 2049 .-> N2
+    SERVER -. network port 2049 .-> N3
+    subgraph N1["Node 1"]
+        P1["Pod-A → /data"]
+    end
+    subgraph N2["Node 2"]
+        P2["Pod-B → /data"]
+    end
+    subgraph N3["Node 3"]
+        P3["Pod-C → /data"]
+    end
+
+    style SERVER fill:#fff3e0,stroke:#fb8c00
+    style N1 fill:#e3f2fd,stroke:#1e88e5
+    style N2 fill:#e3f2fd,stroke:#1e88e5
+    style N3 fill:#e3f2fd,stroke:#1e88e5
+```
+
+All pods see the **same files** because they all mount the same NFS share (ReadWriteMany).
+
 ```
 ┌─── NFS Server (separate machine or VM) ───┐
 │                                             │
@@ -50,7 +96,7 @@ Options for on-prem shared storage:
                    │ Network (port 2049)
           ┌────────┼────────┐
           │        │        │
-          ▼        ▼        ▼
+                          
 ┌──── Node 1 ──┐ ┌──── Node 2 ──┐ ┌──── Node 3 ──┐
 │  Pod-A        │ │  Pod-B        │ │  Pod-C        │
 │    ↓          │ │    ↓          │ │    ↓          │
@@ -479,6 +525,39 @@ kubectl logs -n nfs-provisioner -l app=nfs-subdir-external-provisioner
 | **Best for** | Existing infra | AWS users | K8s-native HA storage |
 
 ---
+
+## Common Mistakes
+
+1. **Forgetting the NFS client on worker nodes.** Without `nfs-common` (Debian/Ubuntu) or `nfs-utils` (RHEL/CentOS) on **every** node, pods get stuck in `ContainerCreating` with a mount error. Install it on all nodes.
+2. **Running the NFS server on a Kubernetes node.** If that node goes down or gets drained, your storage disappears too. Use a **dedicated** machine/VM.
+3. **Wide-open `/etc/exports` with `no_root_squash`.** Combining a broad CIDR with `no_root_squash` lets a pod's root act as root on the server - a real security hole. Prefer specific IPs and the default `root_squash` unless you truly need otherwise.
+4. **Firewall blocking port 2049.** A common cause of `mount.nfs: Connection timed out`. Open NFS ports on the server.
+5. **Treating a single NFS server as production-safe.** It's a single point of failure. Plan for HA (Longhorn, Ceph, DRBD/Pacemaker) and regular backups.
+
+## Quick Self-Check
+
+1. Why must a dedicated NFS server (not a K8s node) be used in production?
+2. What package must be installed on every worker node, and what happens if it's missing?
+3. Which access mode does NFS support that EBS cannot, and why does that matter?
+4. What does the NFS Subdir External Provisioner give you over manually creating PVs?
+5. Name one security best practice for `/etc/exports`.
+
+<details>
+<summary>Answers</summary>
+
+1. So your storage doesn't disappear when a worker node fails, is drained, or is rebooted - storage availability stays independent of the compute nodes.
+2. The NFS client (`nfs-common` / `nfs-utils`). Without it, pods can't mount the share and stay stuck in `ContainerCreating`.
+3. `ReadWriteMany` (RWX) - many pods across many nodes can read/write the same volume simultaneously, which EBS (block, RWO) can't do.
+4. **Dynamic provisioning** - it auto-creates a PV (a subdirectory on the share) for each PVC, so you don't hand-write a PV every time.
+5. Use specific node IPs instead of wide CIDR ranges, keep the default `root_squash`, or separate exports per namespace/environment.
+
+</details>
+
+## Summary
+
+NFS is the simplest way to give an on-prem Kubernetes cluster shared, `ReadWriteMany` storage: a dedicated NFS server exports a directory, every worker node mounts it via the NFS client, and pods on any node see the same files. Start with manual PV/PVC to learn it, then switch to the **NFS Subdir External Provisioner** for automatic PV creation. Mind the gotchas - install the client everywhere, lock down `/etc/exports`, and plan for HA since a lone NFS server is a single point of failure.
+
+**Next up →** [AWS Volumes (EBS/EFS)](../aws-volumes/notes.md) for the cloud-managed equivalent, or revisit [Volumes Theory](../notes.md).
 
 ## Key Takeaways
 

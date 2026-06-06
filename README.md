@@ -1,71 +1,92 @@
-# Learn Kubernetes - Day-Wise Notes for Beginners
+# Learn Kubernetes - Day-Wise, Beginner to Advanced
 
-A complete beginner-friendly, day-by-day Kubernetes learning guide. Each day builds on the previous one, explaining **why** we need each concept before diving into **how**.
+> **Module 4 of the DevOps Masterclass.** You can package apps in containers (Docker ). Kubernetes is how you run them **reliably, at scale, in production**. Each day builds on the last - explaining **why** before **how**.
+
+---
+
+## Why Kubernetes? (30-second version)
+
+Docker runs containers on **one machine**. But what happens when a container crashes at 3 AM? When traffic spikes 10×? When you need zero-downtime deploys across 50 servers? Doing that by hand is impossible.
+
+**Kubernetes is an automatic manager for your containers** - it restarts crashed ones, scales them up and down with demand, spreads them across many machines, and heals itself when servers die.
+
+```mermaid
+flowchart LR
+    A[" Docker<br/>runs containers on ONE machine<br/>(you babysit them)"] --> B[" Kubernetes<br/>runs containers across MANY machines<br/>self-healing · auto-scaling · zero-downtime"]
+    style A fill:#0d2818,stroke:#3fb950,color:#fff
+    style B fill:#0a1a3a,stroke:#5b8def,color:#fff
+```
+
+> **Analogy:** Docker is *driving one car*. Kubernetes is *running the whole Uber fleet* - dispatching, replacing, and scaling thousands of cars automatically.
+
+---
+
+## Interactive Animations (open in any browser - no install)
+
+| Animation | What it teaches |
+|---|---|
+| [**Architecture Explorer**](animations/k8s-architecture.html) | Click each component (api-server, etcd, scheduler, kubelet…) to learn its job |
+| [**Self-Healing & Auto-Scaling**](animations/k8s-self-healing.html) | Crash pods and watch Kubernetes restore desired state automatically |
 
 ---
 
 ## Who Is This For?
-
 - Complete beginners who know basic Linux and Docker
 - Students who want to understand Kubernetes end-to-end
-- Anyone preparing for CKA/CKAD exams
+- Anyone preparing for **CKA/CKAD** exams
 
 ## Prerequisites
-
-- Basic Linux commands (cd, ls, cat, vim)
-- Docker fundamentals (images, containers, Dockerfile)
-- A laptop with 4GB+ RAM
+- Basic Linux commands (`cd`, `ls`, `cat`, `vim`)
+- Docker fundamentals → see the [`learn-docker`](../learn-docker) module
+- A laptop with 4GB+ RAM (for Minikube)
 
 ---
 
-## Day-Wise Roadmap (25 Days)
+## Day-Wise Roadmap
+
+> Folder names use `dayNN-topic`. A few day numbers in this table map to the nearest existing folder; follow the links.
 
 | Day | Topic | Type | What You'll Learn |
 |-----|-------|------|-------------------|
-| [Day 01](Day01-Why-Kubernetes/notes.md) | **Why Kubernetes?** | Theory | Problems with traditional deployment, why containers alone aren't enough |
-| [Day 02](Day02-Architecture/notes.md) | **Kubernetes Architecture** | Theory | Master node, Worker node, all internal components |
-| [Day 03](Day03-Setup/notes.md) | **Setting Up K8s** | Setup | Install Minikube, kubectl, and run your first cluster |
-| [Day 04](Day04-Pods/notes.md) | **Pods** | Theory + Lab | The smallest unit in K8s, create and manage Pods |
-| [Day 05](Day05-ReplicaSets/notes.md) | **ReplicaSets** | Theory + Lab | Running multiple copies of your app, self-healing |
-| [Day 06](Day06-Deployments/notes.md) | **Deployments** | Theory + Lab | Rolling updates, rollbacks, zero-downtime deployments |
-| [Day 07](Day07-Services/notes.md) | **Services & Networking** | Theory | ClusterIP, NodePort, LoadBalancer, ExternalName, Headless |
-| [Day 08](Day08-Services-Demo/notes.md) | **Services Demo** | Hands-On | Demo all 5 service types, DNS discovery, load balancing |
-| [Day 09](Day09-Namespaces/notes.md) | **Namespaces** | Theory + Lab | Organizing and isolating resources in a cluster |
-| [Day 10](Day10-ConfigMaps-Secrets/notes.md) | **ConfigMaps & Secrets** | Theory + Lab | Externalizing configuration, managing sensitive data |
-| [Day 11](Day11-Volumes/notes.md) | **Volumes & Persistent Storage** | Theory | Data persistence, PV, PVC, StorageClass |
-| [Day 12](Day12-Volumes-Demo/notes.md) | **Volumes Demo** | Hands-On | Prove data survives pod deletion, PV/PVC binding, MySQL demo |
-| [Day 13](Day13-Ingress/notes.md) | **Ingress** | Theory | HTTP routing, domain-based routing, TLS |
-| [Day 14](Day14-Ingress-Demo/notes.md) | **Ingress Demo** | Hands-On | Path-based routing, host-based routing, TLS setup |
-| [Day 15](Day15-DaemonSets-Jobs-CronJobs/notes.md) | **DaemonSets, Jobs & CronJobs** | Theory + Lab | Running pods on every node, batch processing |
-| [Day 16](Day16-Resource-Management/notes.md) | **Resource Management & Autoscaling** | Theory + Lab | CPU/Memory limits, HPA, VPA |
-| [Day 17](Day17-RBAC-Security/notes.md) | **RBAC & Security** | Theory + Lab | Role-Based Access Control, Service Accounts |
-| [Day 18](Day18-StatefulSets/notes.md) | **StatefulSets** | Theory | Running stateful applications like databases |
-| [Day 19](Day19-StatefulSets-Demo/notes.md) | **StatefulSets Demo** | Hands-On | Ordered creation, headless DNS, per-pod storage |
-| [Day 20](Day20-Network-Policies/notes.md) | **Network Policies** | Theory + Lab | Controlling traffic between pods |
-| [Day 21](Day21-Helm/notes.md) | **Helm** | Theory + Lab | Package manager for Kubernetes |
-| [Day 22](Day22-Monitoring-Logging/notes.md) | **Monitoring & Logging** | Theory | Prometheus, Grafana, log collection |
-| [Day 23](Day23-Monitoring-Demo/notes.md) | **Monitoring Demo** | Hands-On | Install Prometheus+Grafana, dashboards, PromQL, load test |
-| [Day 24](Day24-CICD/notes.md) | **CI/CD with Kubernetes** | Theory + Lab | Automating deployments with pipelines, ArgoCD |
-| [Day 25](Day25-Project-BestPractices/notes.md) | **Real-World Project & Best Practices** | Hands-On | Deploy a full 3-tier application end-to-end |
+| [Day 01](day01-why-kubernetes/notes.md) | **Why Kubernetes?** | Theory | Problems with manual deployment; why containers alone aren't enough |
+| [Day 02](day02-architecture/notes.md) | **Architecture** | Theory | Control plane, worker nodes, all internal components |
+| [Day 03](day03-setup/notes.md) | **Setup** | Setup | Install Minikube, kubectl, run your first cluster |
+| [Day 04](day04-pods/notes.md) | **Pods** | Theory + Lab | The smallest unit in K8s; create & manage Pods |
+| [Day 05](day05-replicasets/notes.md) | **ReplicaSets** | Theory + Lab | Running multiple copies; self-healing |
+| [Day 06](day06-deployments/notes.md) | **Deployments** | Theory + Lab | Rolling updates, rollbacks, zero-downtime |
+| [Day 07](day07-services/notes.md) | **Services & Networking** | Theory | ClusterIP, NodePort, LoadBalancer, Headless |
+| [Day 08](day08-services-demo/notes.md) | **Services Demo** | Hands-On | All service types, DNS discovery, load balancing |
+| [Day 09](day09-namespaces/notes.md) | **Namespaces** | Theory + Lab | Organizing & isolating resources |
+| [Day 10](day10-configmaps-secrets/notes.md) | **ConfigMaps & Secrets** | Theory + Lab | Externalizing config; managing sensitive data |
+| [Day 11](day11-eks/notes.md) | **EKS (Managed K8s on AWS)** | Cloud | Managed control plane, [node groups](day11-eks/managed-nodegroups/notes.md) |
+| [Day 12](day12-volumes/notes.md) | **Volumes & Storage** | Theory | PV, PVC, StorageClass; [AWS](day12-volumes/aws-volumes/notes.md) & [NFS](day12-volumes/nfs-volumes/notes.md) |
+| [Day 13](day13-volumes-demo/notes.md) | **Volumes Demo** | Hands-On | Data survives pod deletion; [EKS demo](day13-volumes-demo/eks-demo.md) |
+| [Day 14](day14-statefulsets/notes.md) | **StatefulSets** | Theory | Running stateful apps like databases |
+| [Day 15](day15-statefulsets-demo/notes.md) | **StatefulSets Demo** | Hands-On | Ordered creation, stable identity; [EKS demo](day15-statefulsets-demo/eks-demo.md) |
+| [Day 16](day16-resource-management-autoscaling/notes.md) | **Resource Management & Autoscaling** | Theory + Lab | Requests/limits, QoS, HPA, VPA, Cluster Autoscaler |
+| [Day 17](day17-rbac-security/notes.md) | **RBAC & Cluster Security** | Theory + Lab | Roles, RoleBindings, ServiceAccounts, least privilege |
+| [Day 18](day18-ingress-demo/notes.md) | **Ingress** | Hands-On | HTTP routing, host/path rules, TLS; [EKS demo](day18-ingress-demo/eks-demo.md) |
+| [Day 19](day19-daemonsets-jobs-cronjobs/notes.md) | **DaemonSets, Jobs & CronJobs** | Theory + Lab | One-pod-per-node, batch & scheduled tasks |
+| [Day 20](day20-network-policies/notes.md) | **Network Policies** | Theory + Lab | Pod-to-pod firewalls, default-deny, CNI requirement |
+| [Day 22](day22-monitoring-logging/notes.md) | **Monitoring & Logging** | Theory + Lab | Prometheus, Grafana, alerting, log aggregation, probes |
+| [Day 24](day24-helm/notes.md) | **Helm** | Theory + Lab | Package manager for K8s; [demo](day24-helm/demo.md) |
 
 ---
 
-## How to Use This Repo
+## How to Use This Module
+1. **Follow day by day** - each concept builds on the previous.
+2. **Type the commands yourself** - build muscle memory.
+3. **Break things on purpose** - delete pods, crash containers, watch K8s recover (try the [self-healing animation](animations/k8s-self-healing.html) first!).
+4. **Read the YAML** - understanding YAML structure is key to mastering K8s.
 
-1. **Follow day by day** - don't skip days, each concept builds on the previous
-2. **Type the commands yourself** - don't just copy-paste, type them to build muscle memory
-3. **Break things on purpose** - delete pods, crash containers, see how K8s recovers
-4. **Read the YAML files** - understanding YAML structure is key to mastering K8s
-
-## Quick Reference - kubectl Cheat Sheet
-
+## kubectl Cheat Sheet
 ```bash
 # Cluster info
 kubectl cluster-info
 kubectl get nodes
 
 # Working with resources
-kubectl get pods / deployments / services / all
+kubectl get pods | deployments | services | all
 kubectl describe pod <pod-name>
 kubectl logs <pod-name>
 kubectl exec -it <pod-name> -- /bin/bash
@@ -83,4 +104,16 @@ kubectl get pods -o wide
 
 ---
 
-**Happy Learning!** Start with [Day 01 - Why Kubernetes?](Day01-Why-Kubernetes/notes.md)
+## Learning Outcomes
+By the end you'll be able to:
+- Explain what Kubernetes does and why it exists
+- Read and write Kubernetes YAML manifests
+- Deploy, scale, update, and roll back applications
+- Expose apps with Services and Ingress
+- Manage config, secrets, storage, and stateful apps
+- Package apps with Helm and run on managed K8s (EKS)
+
+---
+
+**Start with** → [Day 01 - Why Kubernetes?](day01-why-kubernetes/notes.md)
+Next module → [**learn-cicd**](../learn-cicd)

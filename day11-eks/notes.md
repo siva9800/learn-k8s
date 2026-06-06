@@ -1,5 +1,26 @@
 # Day 11 - Amazon EKS (Elastic Kubernetes Service)
 
+> **Goal:** Move from a single-node Kubernetes on your laptop to a real, production-grade, AWS-managed Kubernetes cluster - and understand exactly what AWS runs for you and what you still own.
+
+## Learning Objectives
+
+By the end of this lesson you will be able to:
+
+1. Explain what EKS is and which parts AWS manages vs. which parts you manage.
+2. Install the three tools you need: `aws` CLI, `kubectl`, and `eksctl`.
+3. Create an EKS cluster three different ways (eksctl flags, YAML config, AWS Console).
+4. Connect `kubectl` to your cluster and deploy an app exposed by a real AWS load balancer.
+5. Choose between Managed Node Groups, Self-Managed Nodes, and Fargate.
+6. Scale your cluster - and (very important) **delete it** to avoid surprise bills.
+
+## Real-World Analogy
+
+Think of running Kubernetes yourself (self-managed) like **owning a house**: you fix the roof, the plumbing, the wiring - everything is your job.
+
+**EKS is like renting a serviced apartment.** The building owner (AWS) takes care of the foundation, security, and maintenance of the shared infrastructure - this is the **control plane** (the "brain" of Kubernetes). You just bring your furniture and live there - your **worker nodes** and **apps**. You pay rent for the building service ($0.10/hour for the control plane) plus your own utilities (the EC2 worker nodes and storage).
+
+You get all the benefits of a well-run building without having to become a building engineer.
+
 ## Why EKS? Why Not Just Minikube?
 
 So far we've been using **Minikube** - a single-node K8s cluster on your laptop. That's great for learning, but in production you need:
@@ -19,41 +40,28 @@ So far we've been using **Minikube** - a single-node K8s cluster on your laptop.
 
 **EKS** = Amazon Elastic Kubernetes Service
 
-AWS runs and manages the **control plane** (master node) for you. You only manage the **worker nodes**.
+AWS runs and manages the **control plane** (the master components) for you. You only manage the **worker nodes**.
 
+```mermaid
+graph TD
+    subgraph AWS[" AWS Manages This (Control Plane - $0.10/hr)"]
+        API["API Server"]
+        ETCD["etcd (cluster database)"]
+        SCHED["Scheduler"]
+        CM["Controller Manager"]
+    end
+    subgraph YOU[" You Manage This (Worker Nodes - EC2 cost)"]
+        W1["Worker Node 1 (EC2)<br/>Pods"]
+        W2["Worker Node 2 (EC2)<br/>Pods"]
+    end
+    API -->|schedules &amp; controls| W1
+    API -->|schedules &amp; controls| W2
+
+    style AWS fill:#fff3e0,stroke:#fb8c00
+    style YOU fill:#e3f2fd,stroke:#1e88e5
 ```
-┌──── AWS Manages This ────┐
-│                           │
-│  ┌─────────────────────┐  │
-│  │   Control Plane     │  │
-│  │   (Master Node)     │  │
-│  │                     │  │
-│  │  API Server         │  │
-│  │  etcd               │  │
-│  │  Scheduler          │  │
-│  │  Controller Manager │  │
-│  └─────────────────────┘  │
-│                           │
-│  - Multi-AZ (high avail) │
-│  - Auto patching          │
-│  - Auto backup            │
-└───────────────────────────┘
-            │
-            │ connects
-            │
-┌──── You Manage This ─────┐
-│                           │
-│  ┌────────┐ ┌────────┐   │
-│  │Worker 1│ │Worker 2│   │
-│  │(EC2)   │ │(EC2)   │   │
-│  │        │ │        │   │
-│  │ Pods   │ │ Pods   │   │
-│  └────────┘ └────────┘   │
-│                           │
-│  Your applications run    │
-│  here on EC2 instances    │
-└───────────────────────────┘
-```
+
+**What AWS handles on the control plane:** multi-AZ high availability, automatic patching, automatic etcd backups, and one-click version upgrades. You never SSH into the control plane - you can't even see it as EC2 instances.
 
 ---
 
@@ -183,7 +191,7 @@ kind: ClusterConfig
 metadata:
   name: my-cluster
   region: ap-south-1
-  version: "1.29"
+  version: "1.31"        # ← use a currently-supported EKS version
 
 managedNodeGroups:
   - name: workers
@@ -334,12 +342,15 @@ kubectl scale deployment web --replicas=10
 Automatically adds/removes nodes based on pod demand:
 
 ```bash
-# Install Cluster Autoscaler
-kubectl apply -f https://raw.githubusercontent.com/kubernetes/autoscaler/master/cluster-autoscaler/cloudprovider/aws/examples/cluster-autoscaler-autodiscover.yaml
+# Install Cluster Autoscaler (the manifest is maintained per K8s minor version;
+# match it to your cluster, and the autoscaler image tag to your control plane version)
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/autoscaler/cluster-autoscaler-release-1.31/cluster-autoscaler/cloudprovider/aws/examples/cluster-autoscaler-autodiscover.yaml
 ```
 
-When pods are pending (no space on existing nodes) → Autoscaler adds a new node.
-When nodes are underutilized → Autoscaler removes them.
+When pods are pending (no space on existing nodes) -> Autoscaler adds a new node.
+When nodes are underutilized -> Autoscaler removes them.
+
+Karpenter is a popular AWS-native alternative to the Cluster Autoscaler that provisions right-sized nodes directly (no Auto Scaling Group needed).
 
 ---
 
@@ -402,6 +413,39 @@ kubectl get nodes
 
 ---
 
+## Common Mistakes
+
+1. **Forgetting to delete the cluster.** This is the #1 way students get a surprise AWS bill. The control plane alone is ~$73/month even with zero apps running. Run `eksctl delete cluster` the moment you're done.
+2. **Wrong region.** If `aws configure` set one region but your `eksctl`/`kubectl` commands use another, you'll see "cluster not found" or an empty `kubectl get nodes`. Keep `--region` consistent everywhere.
+3. **Picking an unsupported Kubernetes version.** AWS only supports a rolling window of versions. Pinning an old `version:` in `cluster.yaml` causes creation to fail. Use a currently-supported version (e.g. 1.31).
+4. **Using `type=LoadBalancer` everywhere and leaving them running.** Each AWS load balancer costs ~$16/month. Delete the Service (`kubectl delete svc web`) to release the load balancer before deleting the cluster.
+5. **Expecting Fargate to do everything.** Fargate has no DaemonSets, no `hostPath`, and no GPU support. If your workload needs those, use a node group instead.
+
+## Quick Self-Check
+
+1. Which part of an EKS cluster does AWS manage, and which part do you manage?
+2. What does `aws eks update-kubeconfig` actually do?
+3. On EKS, what real AWS resource is created when you expose a Service with `--type=LoadBalancer`?
+4. Name one capability you lose by choosing Fargate over a managed node group.
+5. Which single command tears down the cluster, node groups, and VPC together?
+
+<details>
+<summary>Answers</summary>
+
+1. AWS manages the **control plane** (API server, etcd, scheduler, controller manager); you manage the **worker nodes** and your apps.
+2. It writes connection details (endpoint + auth) for your EKS cluster into your local `~/.kube/config` so `kubectl` talks to that cluster.
+3. A real AWS **Classic/Network Load Balancer** with a public DNS URL.
+4. Any of: DaemonSets, `hostPath` volumes, GPU support, custom AMIs (also true single-pod-per-task isolation).
+5. `eksctl delete cluster --name my-cluster --region ap-south-1`.
+
+</details>
+
+## Summary
+
+EKS gives you production Kubernetes without the pain of running the control plane yourself - AWS handles HA, patching, and upgrades for $0.10/hr, while you manage worker nodes (or skip them entirely with Fargate). `eksctl` is the fastest path to a cluster, and the same `kubectl`/YAML skills from Minikube transfer directly. The one habit that matters most: **delete your cluster when you're done** to avoid charges.
+
+**Next up →** [Day 12 - Volumes & Persistent Storage](../day12-volumes/notes.md), where your data finally survives pod restarts.
+
 ## Key Takeaways
 
 1. **EKS** = AWS-managed Kubernetes (control plane managed by AWS)
@@ -413,7 +457,6 @@ kubectl get nodes
 7. **Always delete your cluster** when not in use to avoid charges!
 
 > **Deep Dive:** [Managed Node Groups](managed-nodegroups/notes.md)
-> **Autoscaling on EKS:** [Day 20 - Autoscaling](../day20-autoscaling/notes.md)
 
 ---
 

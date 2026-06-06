@@ -1,10 +1,50 @@
 # Day 18 - Ingress Demo
 
-> **Pre-requisite:** Make sure you've read [Day 17 - Ingress Theory](../day17-ingress/notes.md)
+> **Goal:** Get one nginx Ingress Controller running on Minikube and use it to route traffic by **path**, by **hostname**, and over **HTTPS** - all with a single public entry point.
+
+> **Pre-requisite:** You should already understand Services (ClusterIP, NodePort, LoadBalancer) from [Day 07 - Services](../day07-services/notes.md) and [Day 08 - Services Demo](../day08-services-demo/notes.md). This day combines Ingress theory and a hands-on lab in one place.
 >
 > **For production demos on EKS:** See [Ingress Demo (EKS / Production - AWS ALB)](eks-demo.md)
 
 In this hands-on session, we'll set up an nginx Ingress Controller on Minikube and walk through path-based routing, host-based routing, and TLS setup.
+
+## Learning Objectives
+
+By the end of this demo you will be able to:
+
+1. Enable and verify the nginx Ingress Controller on Minikube.
+2. Route requests to different services based on the URL **path** (`/app1`, `/app2`).
+3. Route requests to different services based on the **hostname** (`app1.example.com`).
+4. Secure an Ingress with **HTTPS / TLS** using a Kubernetes Secret.
+5. Combine path, host, and TLS rules in one Ingress.
+6. Troubleshoot the most common Ingress problems.
+
+## Real-World Analogy: Ingress = The Hotel Receptionist
+
+Picture a big hotel with **one front door** and **one street address**. Hundreds of guests arrive every day, but they all want different things - the restaurant, the gym, room 204, the conference hall.
+
+The **receptionist** stands at that single front door and asks: *"Who are you here to see?"* Then she points each guest to the right place.
+
+- **Ingress Controller = the receptionist** (the actual person doing the routing).
+- **Ingress resource = the receptionist's instruction sheet** ("anyone asking for the gym, send to floor 2").
+- **Host-based routing** = routing by the *name* the guest asks for (`app1.example.com` vs `app2.example.com`) - like asking "which company are you visiting?"
+- **Path-based routing** = routing by *which part* of the address (`/app1` vs `/app2`) - like "the restaurant is down the left hall, the gym down the right."
+- **TLS** = the guest and receptionist speak in a sealed, private language so eavesdroppers in the lobby can't understand.
+
+Without a receptionist, every department would need its own street address (its own LoadBalancer / public IP), which is expensive and messy. With one receptionist (one Ingress), you get **one address, many destinations**.
+
+```mermaid
+flowchart LR
+    U1["Visitor asks for<br/>myapp.local/app1"] --> ING
+    U2["Visitor asks for<br/>myapp.local/app2"] --> ING
+    U3["Visitor asks for<br/>app2.example.com"] --> ING
+    ING[" nginx Ingress Controller<br/>(the receptionist)<br/>reads host + path"]
+    ING -->|"path /app1"| S1["app1-service"]
+    ING -->|"path /app2"| S2["app2-service"]
+    ING -->|"host app2.example.com"| S2
+    S1 --> P1["app1 pods"]
+    S2 --> P2["app2 pods"]
+```
 
 ---
 
@@ -67,9 +107,9 @@ We'll use this IP throughout the demos.
 ```
 Browser request                    Ingress Controller              Backend
                                                                     Services
-http://myapp.local/app1  ────►  ┌─────────────────┐  ────►  app1-service ──► app1 pods
+http://myapp.local/app1  ────  ┌─────────────────┐  ────  app1-service ── app1 pods
                                 │  nginx Ingress   │
-http://myapp.local/app2  ────►  │  Controller      │  ────►  app2-service ──► app2 pods
+http://myapp.local/app2  ────  │  Controller      │  ────  app2-service ── app2 pods
                                 └─────────────────┘
 ```
 
@@ -93,9 +133,9 @@ spec:
     spec:
       containers:
       - name: app1
-        image: hashicorp/http-echo        # ← Simple HTTP echo server
+        image: hashicorp/http-echo        # <-- Simple HTTP echo server
         args:
-        - "-text=Hello from App1!"        # ← Returns this text
+        - "-text=Hello from App1!"        # <-- Returns this text
         ports:
         - containerPort: 5678
 ---
@@ -173,14 +213,14 @@ kind: Ingress
 metadata:
   name: path-ingress
   annotations:
-    nginx.ingress.kubernetes.io/rewrite-target: /    # ← Important! Rewrites /app1 to /
+    nginx.ingress.kubernetes.io/rewrite-target: /    # <-- Important! Rewrites /app1 to /
 spec:
   ingressClassName: nginx
   rules:
-  - host: myapp.local                                # ← Our test hostname
+  - host: myapp.local                                # <-- Our test hostname
     http:
       paths:
-      - path: /app1                                  # ← myapp.local/app1
+      - path: /app1                                  # <-- myapp.local/app1
         pathType: Prefix
         backend:
           service:
@@ -188,7 +228,7 @@ spec:
             port:
               number: 80
 
-      - path: /app2                                  # ← myapp.local/app2
+      - path: /app2                                  # <-- myapp.local/app2
         pathType: Prefix
         backend:
           service:
@@ -267,7 +307,7 @@ Without rewrite:                     With rewrite-target: /
 
 Client: /app1/data                   Client: /app1/data
          │                                    │
-         ▼                                    ▼
+                                             
 Backend gets: /app1/data             Backend gets: /data
 (usually 404!)                       (works correctly!)
 ```
@@ -287,9 +327,9 @@ kubectl delete -f app2-deployment.yaml
 **Goal:** Route `app1.example.com` to one service and `app2.example.com` to another.
 
 ```
-app1.example.com  ────►  ┌──────────────────┐  ────►  app1-service ──► app1 pods
+app1.example.com  ────  ┌──────────────────┐  ────  app1-service ── app1 pods
                           │  nginx Ingress   │
-app2.example.com  ────►  │  Controller      │  ────►  app2-service ──► app2 pods
+app2.example.com  ────  │  Controller      │  ────  app2-service ── app2 pods
                           └──────────────────┘
 ```
 
@@ -383,7 +423,7 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-  - host: app1.example.com            # ← First virtual host
+  - host: app1.example.com            # <-- First virtual host
     http:
       paths:
       - path: /
@@ -394,7 +434,7 @@ spec:
             port:
               number: 80
 
-  - host: app2.example.com            # ← Second virtual host
+  - host: app2.example.com            # <-- Second virtual host
     http:
       paths:
       - path: /
@@ -460,7 +500,7 @@ Same IP address, different responses based on the **hostname**!
 
    ┌──── HTTP Request ────────────────┐
    │ GET / HTTP/1.1                    │
-   │ Host: app1.example.com   ◄── Key!│
+   │ Host: app1.example.com   ── Key!│
    │ ...                               │
    └───────────────────────────────────┘
 ```
@@ -481,8 +521,8 @@ kubectl delete -f host-apps.yaml
 ```
 Client                          Ingress Controller              Service
   │                                    │                            │
-  │── HTTPS (port 443) ──────────►     │                            │
-  │   encrypted with TLS cert          │── HTTP (port 80) ──────►  │
+  │── HTTPS (port 443) ──────────     │                            │
+  │   encrypted with TLS cert          │── HTTP (port 80) ──────  │
   │                                    │   plain internal traffic   │
   │   Certificate: tls-secret          │                            │
   │   (stored as K8s Secret)           │                            │
@@ -583,13 +623,13 @@ kind: Ingress
 metadata:
   name: tls-ingress
   annotations:
-    nginx.ingress.kubernetes.io/ssl-redirect: "true"    # ← Force HTTPS
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"    # <-- Force HTTPS
 spec:
   ingressClassName: nginx
-  tls:                                                    # ← TLS config section
+  tls:                                                    # <-- TLS config section
   - hosts:
-    - secure.example.com                                  # ← Domain for this cert
-    secretName: tls-secret                                # ← Secret with cert+key
+    - secure.example.com                                  # <-- Domain for this cert
+    secretName: tls-secret                                # <-- Secret with cert+key
   rules:
   - host: secure.example.com
     http:
@@ -653,7 +693,7 @@ curl -kv https://secure.example.com 2>&1 | grep -i "subject\|issuer"
    ┌── External Network ──┐    ┌── Inside Cluster ──┐
    │                       │    │                     │
    │  HTTPS (encrypted)    │    │  HTTP (plain)       │
-   │  Client ──► Ingress   │    │  Ingress ──► Svc    │
+   │  Client ── Ingress   │    │  Ingress ── Svc    │
    │             Controller │    │                     │
    └───────────────────────┘    └─────────────────────┘
 ```
@@ -677,11 +717,11 @@ rm tls.crt tls.key
                          ┌──────────────────────────┐
                          │   Ingress Controller     │
                          │                          │
-https://web.mysite.com   │  web.mysite.com/         │──► frontend-svc
-                    ────►│                          │
-                         │  api.mysite.com/v1       │──► api-v1-svc
+https://web.mysite.com   │  web.mysite.com/         │── frontend-svc
+                    ────│                          │
+                         │  api.mysite.com/v1       │── api-v1-svc
 https://api.mysite.com   │                          │
-                    ────►│  api.mysite.com/v2       │──► api-v2-svc
+                    ────│  api.mysite.com/v2       │── api-v2-svc
                          │                          │
                          └──────────────────────────┘
 ```
@@ -995,6 +1035,47 @@ kubectl exec -n ingress-nginx <controller-pod> -- cat /etc/nginx/nginx.conf
 
 ---
 
+## Common Mistakes
+
+1. **Forgetting the Ingress Controller.** An Ingress *resource* does nothing on its own - it's just instructions. Without a running controller (`minikube addons enable ingress`), the `ADDRESS` column stays empty and nothing routes.
+2. **Missing `ingressClassName: nginx`.** If you omit it, the nginx controller may ignore your Ingress. (Old tutorials used the `kubernetes.io/ingress.class` annotation - `ingressClassName` is the modern, correct field.)
+3. **Wrong `pathType`.** `Prefix` matches `/app1` and everything under it; `Exact` matches *only* `/app1`. Beginners often use `Exact` and then wonder why `/app1/page` returns 404.
+4. **Service name or port mismatch.** The `backend.service.name` and `port.number` in the Ingress must match a real Service (and its `port:`, not the pod's `targetPort`). A typo here is the #1 cause of `404`/`503`.
+5. **Skipping the `/etc/hosts` entry (or letting Minikube's IP change).** `myapp.local` is not real DNS - your machine needs to be told it points to the Minikube IP, and that IP can change after a `minikube stop/start`.
+
+## Quick Self-Check
+
+1. What is the difference between an **Ingress resource** and an **Ingress controller**?
+2. You browse to `myapp.local/app2` and get the App2 response. Which field in the Ingress decided that - host or path?
+3. Why does path-based routing often need the `nginx.ingress.kubernetes.io/rewrite-target: /` annotation?
+4. In a TLS Ingress, what kind of Kubernetes object holds the certificate, and what `type` is it?
+5. `kubectl get ingress` shows an empty `ADDRESS`. What is the first thing you should check?
+
+<details>
+<summary>Answers</summary>
+
+1. The **resource** is the YAML rule ("route this host/path here"); the **controller** is the running nginx pod that actually reads those rules and forwards traffic. You need both.
+2. The **path** (`/app2`) - same host, different path.
+3. Because nginx forwards the full original path to the backend. The backend usually expects `/`, not `/app1`, so `rewrite-target: /` strips the prefix.
+4. A **Secret** of type `kubernetes.io/tls`, containing `tls.crt` and `tls.key`.
+5. Whether the Ingress controller is installed and running (`kubectl get pods -n ingress-nginx`). No controller = no address.
+
+</details>
+
+---
+
+## Summary
+
+- One **Ingress Controller** (nginx here) acts as the single smart entry point - the hotel receptionist - for HTTP/HTTPS traffic into your cluster.
+- **Path-based routing** sends `/app1` and `/app2` to different services; usually paired with `rewrite-target`.
+- **Host-based routing** sends `app1.example.com` and `app2.example.com` to different services from the *same* IP, using the HTTP `Host` header.
+- **TLS** is added with a `kubernetes.io/tls` Secret plus a `tls:` block in the Ingress; `ssl-redirect` forces HTTP to HTTPS.
+- You can mix all three in one Ingress, and you debug with `kubectl describe ingress` plus the controller logs.
+
+**Next up ->** [Ingress Demo (EKS / Production - AWS ALB)](eks-demo.md), where the same Ingress YAML creates a *real* AWS Load Balancer.
+
+---
+
 ## Key Takeaways
 
 1. **Minikube** has a built-in nginx Ingress addon - just run `minikube addons enable ingress`
@@ -1020,5 +1101,5 @@ kubectl exec -n ingress-nginx <controller-pod> -- cat /etc/nginx/nginx.conf
 
 ---
 
-**Previous:** [← Day 17 - Ingress (Theory)](../day17-ingress/notes.md)
-**Next:** [Day 19 - DaemonSets, Jobs & CronJobs →](../day19-daemonsets-jobs-cronjobs/notes.md)
+**Previous:** [<-- Day 15 - StatefulSets Demo](../day15-statefulsets-demo/notes.md)
+**Next:** [Day 19 - DaemonSets, Jobs & CronJobs -->](../day19-daemonsets-jobs-cronjobs/notes.md)

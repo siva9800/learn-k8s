@@ -1,11 +1,63 @@
 # Day 13 - Volumes Demo (Local / Minikube)
 
+> **Goal:** Get hands-on with Kubernetes storage on Minikube and *prove with your own eyes* which volume types keep your data and which throw it away.
+
 > **Pre-requisite:** Make sure you've read [Day 12 - Volumes Theory](../day12-volumes/notes.md)
 
 In this hands-on session, we'll work through practical volume demos on **Minikube** using emptyDir, hostPath, and local PV/PVC. These are great for learning but **not for production**.
 
 > **For production demos on EKS:** See [Volumes Demo (EKS / Production)](eks-demo.md)
 > **For production theory:** See [AWS Volumes (EBS/EFS)](../day12-volumes/aws-volumes/notes.md) | [NFS Volumes (On-Prem)](../day12-volumes/nfs-volumes/notes.md)
+
+---
+
+## Learning Objectives
+
+By the end of this demo you will be able to:
+
+- Share a directory between two containers in the same pod using **emptyDir**
+- Use **hostPath** to store data on a node and see why it's testing-only
+- Manually create a **PV**, claim it with a **PVC**, and bind them
+- Run **MySQL** with persistent storage and prove data survives a pod restart
+- Use a **StorageClass** for **dynamic provisioning** (no manual PV)
+- Use a **Local PV** the production-safe way (with `nodeAffinity`)
+
+---
+
+## Real-World Analogy: Where Do You Keep Your Stuff?
+
+Think of a **container** as a **hotel room** you check into for one night.
+
+| Storage type | Real-world analogy | Survives pod delete? |
+|---|---|---|
+| **No volume** (container disk) | Scribbling on the hotel notepad - housekeeping bins it at checkout | No |
+| **emptyDir** | A shared whiteboard *inside your room* - both you and your roommate (containers) see it, but it's wiped when you check out (pod dies) | No (dies with pod) |
+| **hostPath** | A drawer in *this specific hotel building* - your stuff stays, but only if you get the same building (node) next time | Only on same node |
+| **PV + PVC** | A **rented storage locker** outside the hotel - switch rooms or hotels, your locker stays | Yes |
+| **StorageClass (dynamic)** | The locker company builds you a **brand-new locker on demand** the moment you ask | Yes |
+
+The whole point of this lab: *stop scribbling on the hotel notepad, start renting lockers.*
+
+---
+
+## Big Picture: The Volume Decision
+
+```mermaid
+flowchart TD
+    Q1{Need data to<br/>survive the pod?}
+    Q1 -->|No, just share<br/>between containers| ED[" emptyDir<br/>(Demo 1)"]
+    Q1 -->|Yes| Q2{Production?}
+    Q2 -->|No, quick test| HP[" hostPath<br/>(Demo 2)"]
+    Q2 -->|Yes| Q3{Want K8s to<br/>create the disk?}
+    Q3 -->|No, I'll make the PV| PV[" Static PV + PVC<br/>(Demo 3, 4)"]
+    Q3 -->|Yes, automatically| SC[" StorageClass<br/>dynamic (Demo 5)"]
+    Q3 -->|Node-local, high IOPS| LPV[" Local PV<br/>(Demo 6)"]
+
+    classDef bad fill:#fee2e2,stroke:#dc2626;
+    classDef ok fill:#dcfce7,stroke:#16a34a;
+    class ED,HP bad;
+    class PV,SC,LPV ok;
+```
 
 ---
 
@@ -22,7 +74,7 @@ In this hands-on session, we'll work through practical volume demos on **Minikub
 │  │  5 seconds  │   │  prints it  │   │
 │  └──────┬──────┘   └──────┬──────┘   │
 │         │                  │          │
-│         ▼                  ▼          │
+│                                     │
 │     ┌───── emptyDir: shared-vol ───┐ │
 │     │  /shared/                     │ │
 │     │    timestamp.txt              │ │
@@ -134,7 +186,7 @@ kubectl delete pod emptydir-demo
 │                                      │
 │  /tmp/hostpath-demo/  ← on node     │
 │       │                              │
-│       ▼ (mounted into pod)           │
+│        (mounted into pod)           │
 │  ┌──── Pod ───────────┐             │
 │  │  Container          │             │
 │  │  /data/ ← sees      │             │
@@ -218,7 +270,7 @@ kubectl delete pod hostpath-demo
 Step 1: Create PV          Step 2: Create PVC         Step 3: Create Pod
 ┌─────────────┐           ┌──────────────┐           ┌──────────┐
 │     PV      │           │     PVC      │           │   Pod    │
-│ 1Gi, RWO    │◄──bind───│ 500Mi, RWO   │◄──uses───│  myapp   │
+│ 1Gi, RWO    │──bind───│ 500Mi, RWO   │──uses───│  myapp   │
 │ hostPath    │           │ manual class │           │          │
 │ Available   │           │              │           │          │
 └─────────────┘           └──────────────┘           └──────────┘
@@ -378,12 +430,12 @@ kubectl delete pv demo-pv
 │                           │
 │  ┌── mysql container ──┐ │
 │  │  MySQL 8.0           │ │
-│  │  /var/lib/mysql ─────┼─┼──► PVC (mysql-pvc)
+│  │  /var/lib/mysql ─────┼─┼── PVC (mysql-pvc)
 │  │                      │ │        │
-│  └──────────────────────┘ │        ▼
+│  └──────────────────────┘ │        
 │                           │    PV (auto or manual)
 └───────────────────────────┘        │
-                                     ▼
+                                     
                                  Actual Disk
                               (data survives!)
 ```
@@ -531,10 +583,10 @@ kubectl delete pv mysql-pv
 
 ```
 Without StorageClass (Static):
-  Admin creates PV ──► Developer creates PVC ──► PVC binds to PV
+  Admin creates PV ── Developer creates PVC ── PVC binds to PV
 
 With StorageClass (Dynamic):
-  Developer creates PVC ──► StorageClass auto-creates PV ──► PVC binds to PV
+  Developer creates PVC ── StorageClass auto-creates PV ── PVC binds to PV
                                     (No admin needed!)
 ```
 
@@ -636,7 +688,7 @@ hostPath:
 
 Local PV:
   nodeAffinity + WaitForFirstConsumer
-  → K8s GUARANTEES pod runs on the node with the disk ✅
+  → K8s GUARANTEES pod runs on the node with the disk 
 ```
 
 ### Step 1: Create StorageClass and Local PV
@@ -809,6 +861,48 @@ minikube ssh -- sudo rm -rf /tmp/local-pv-data
 
 ---
 
+## Common Mistakes
+
+1. **Expecting `emptyDir` to persist.** It shares data *between containers* but is wiped when the **pod** is deleted. For survival, use a PVC.
+2. **Using `hostPath` and wondering why data vanished.** If the pod gets rescheduled to a *different node*, the old node's directory isn't there. `hostPath` is testing-only - use **Local PV** (Demo 6) for the production-safe version.
+3. **Forgetting that `Retain` leaves a `Released` PV behind.** After deleting a PVC, a `Retain` PV does **not** auto-bind to a new claim - an admin must delete or recycle it (`kubectl get pv` shows `Released`).
+4. **Mismatched `storageClassName` / `accessModes` between PV and PVC.** A static PVC only binds to a PV with a **matching** class and compatible access mode/size. Mismatch → PVC stuck `Pending`.
+5. **Panicking when a dynamic PVC sits `Pending`.** With `WaitForFirstConsumer` (used by Local PV and most cloud classes), the PVC binds only **after a pod consumes it**. Schedule the pod.
+
+---
+
+## Quick Self-Check
+
+1. Two containers in one pod need to share scratch files that don't need to outlive the pod. Which volume type?
+2. You delete a pod that used a **PVC**, then recreate it pointing at the same PVC. Is the data still there? Why?
+3. A static PV has `reclaimPolicy: Retain`. You delete its PVC. What status does the PV show, and what must happen before it can be reused?
+4. Why is **Local PV** safer than **hostPath** for node-local storage?
+5. With dynamic provisioning, why might `kubectl get pvc` show `Pending` even though nothing is broken?
+
+<details>
+<summary>Answers</summary>
+
+1. **emptyDir** - shared between containers in the pod, wiped when the pod dies.
+2. **Yes.** The data lives on the PV (backed by the locker/disk), which survives the pod. The new pod re-binds the same PVC.
+3. The PV shows **`Released`**. An admin must **delete it** (or manually recycle/clean it) before it can be bound again - `Retain` never auto-reclaims.
+4. **Local PV** uses `nodeAffinity` so Kubernetes *guarantees* the pod is scheduled on the node that actually holds the disk; `hostPath` lets the pod land on any node, where the directory may not exist.
+5. Many StorageClasses use **`WaitForFirstConsumer`** - the PV/disk is provisioned only once a pod consumes the PVC, so a brief `Pending` is expected.
+
+</details>
+
+---
+
+## Summary
+
+- **emptyDir** = share-between-containers scratch space; dies with the pod.
+- **hostPath** = node-local, survives pod delete but **not** rescheduling - testing only.
+- **PV + PVC** = the production pattern; storage is decoupled from the pod.
+- **StorageClass** = dynamic provisioning, no manual PV creation (recommended).
+- **Local PV** = production-safe node-local disk via `nodeAffinity`.
+- Mind the **reclaimPolicy** (`Retain` vs `Delete`) so you don't lose - or leak - data.
+
+---
+
 ## Practice / Homework
 
 1. Create a pod with **emptyDir** where one container writes logs and another reads them
@@ -820,6 +914,8 @@ minikube ssh -- sudo rm -rf /tmp/local-pv-data
 7. Try creating a PVC that requests MORE storage than any PV has - what happens?
 
 ---
+
+**Next up →** [Day 13 - Volumes Demo (EKS / Production)](eks-demo.md) - do this for real with AWS EBS & EFS.
 
 **Previous:** [← Day 12 - Volumes (Theory)](../day12-volumes/notes.md)
 **Next:** [Day 14 - StatefulSets →](../day14-statefulsets/notes.md)

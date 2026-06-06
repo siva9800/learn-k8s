@@ -1,6 +1,37 @@
 # Day 24 - Helm Demo (Hands-On)
 
+> **Goal:** Build a Helm chart from scratch, then **install -> test -> upgrade -> roll back -> uninstall** it - the full release lifecycle in your own hands.
+
 > **Pre-requisite:** [Day 24 - Helm Theory](notes.md)
+
+## Learning Objectives
+
+By the end of this demo you will be able to:
+
+1. Scaffold a chart with `helm create` and understand the generated files.
+2. Write your own `values.yaml` and templates (ConfigMap, Deployment, Service).
+3. Preview rendered YAML with `helm template` / `--dry-run` before installing.
+4. Install, upgrade (changing values), and roll back a release by revision.
+5. Use conditionals, helpers, and per-environment values files.
+
+## Quick Reminder: The Recipe Analogy
+
+If the theory page was the *menu*, this demo is *cooking the meal*:
+
+- The **chart** is your recipe card.
+- **`values.yaml`** is the ingredient list you can tweak (2 portions vs 5).
+- **`helm install`** cooks and serves it (a **release**).
+- **`helm upgrade`** re-cooks with new ingredient amounts; **`helm rollback`** brings back the previous dish from the fridge.
+
+```mermaid
+flowchart LR
+    SCAFFOLD["helm create<br/>my-webapp"] --> EDIT["edit values.yaml<br/>+ templates/"]
+    EDIT --> PREVIEW["helm template<br/>(preview YAML)"]
+    PREVIEW --> INSTALL["helm install<br/>(revision 1)"]
+    INSTALL --> UPGRADE["helm upgrade<br/>--set replicaCount=4<br/>(revision 2)"]
+    UPGRADE --> ROLLBACK["helm rollback 1<br/>(revision 3)"]
+    ROLLBACK --> UNINSTALL["helm uninstall"]
+```
 
 ## Demo 1 - Create and Deploy Your First Helm Chart
 
@@ -192,7 +223,7 @@ Template breakdown:
   {{ .Values.image.tag }}        --> 1.27
 
   {{- toYaml .Values.resources | nindent 10 }}
-    ↑  This converts the resources block from values.yaml
+       This converts the resources block from values.yaml
        into proper YAML with 10 spaces of indentation.
 
   The "-" in {{- removes whitespace before the tag.
@@ -350,7 +381,7 @@ helm upgrade webapp-v1 ./my-webapp \
 helm list
 # NAME       NAMESPACE   REVISION   STATUS     CHART            APP VERSION
 # webapp-v1  default     2          deployed   my-webapp-0.1.0  1.0.0
-#                        ↑
+#                        ^^
 #                    Now revision 2!
 ```
 
@@ -574,6 +605,47 @@ rm -rf my-webapp
 9. --set key=value        --> Override individual values
 10. helm uninstall        --> Clean up everything
 ```
+
+---
+
+## Common Mistakes
+
+1. **Running `helm install` twice with the same release name.** You'll get "release already exists." Use a different name, `helm uninstall` first, or `helm upgrade --install` (install if missing, upgrade if present).
+2. **Forgetting `helm repo update` before installing a remote chart** (Demo 4) - you may pull a stale chart version.
+3. **`kubectl edit` on Helm-managed resources.** Your edit is wiped on the next `helm upgrade`. Change `values.yaml` / `--set` and upgrade instead.
+4. **Pasting `values-dev.yaml` and `values-prod.yaml` into one file.** They are *two separate files* (Demo 3) - save each on its own.
+5. **Skipping the preview.** Always run `helm lint`, then `helm template` (or `--dry-run --debug`) before a real install; it catches template/whitespace errors before they hit the cluster.
+
+## Quick Self-Check
+
+1. Which command creates the starter chart structure?
+2. How do you see the final rendered YAML *without* touching the cluster?
+3. After `helm upgrade ... --set replicaCount=3`, how do you go back to the previous version?
+4. What does `helm upgrade --install` do that plain `helm install` doesn't?
+5. In Demo 1, where does the web page's heading text actually come from?
+
+<details>
+<summary>Answers</summary>
+
+1. `helm create my-webapp`.
+2. `helm template <release> <chart>` (or `helm install ... --dry-run --debug`).
+3. `helm rollback webapp-v1 1` (rolls back to revision 1).
+4. It installs the release if it doesn't exist yet, and upgrades it if it does - safe to run repeatedly (great for CI/CD).
+5. From `values.yaml` - the `message` field, injected into the ConfigMap template via `{{ .Values.message }}`.
+
+</details>
+
+---
+
+## Summary
+
+- You built a real chart, rendered it, installed it as a **release**, upgraded it, and rolled it back - the complete Helm lifecycle.
+- `helm lint` + `helm template` / `--dry-run --debug` are your safety net: **preview before you install**.
+- `helm rollback <release> <revision>` is one-command "undo" for an entire application.
+- One chart + per-environment values files (`values-dev.yaml`, `values-prod.yaml`) = one app, many environments.
+- Prefer `helm upgrade --install` in automation so the same command works whether or not the release exists.
+
+**Next up ->** That is the full Helm lifecycle, and it is also the last numbered day of the Kubernetes module - congratulations on completing the K8s journey. Head back to the [Kubernetes Module README](../README.md) to review the whole roadmap and choose your next module.
 
 ---
 

@@ -1,5 +1,39 @@
 # Day 24 - Helm
 
+> **Goal:** Understand Helm as the **package manager for Kubernetes** - and learn how charts, values, and releases let you install, upgrade, and roll back whole applications with one command.
+
+## Learning Objectives
+
+By the end of this lesson you will be able to:
+
+1. Explain the problem Helm solves ("YAML hell") and what a chart, release, and repository are.
+2. Add repositories and install/upgrade/rollback/uninstall existing charts.
+3. Describe the standard chart folder structure.
+4. Read basic Go-template syntax (`{{ .Values.x }}`, `if`, `range`).
+5. Preview changes safely with `helm template`, `--dry-run`, and `helm lint`.
+
+## Real-World Analogy: Helm = An App Store for Kubernetes
+
+Installing software the hard way means copying dozens of files into exactly the right folders, in the right order, by hand - and praying you didn't miss one. That's what raw `kubectl apply -f` on many YAML files feels like.
+
+Helm is the **app store / package manager** that does it for you, just like the **App Store on your phone**, `apt` on Ubuntu, or `npm` for Node.js:
+
+- **Chart** = the **app listing** in the store - a packaged, reusable template of all the Kubernetes YAML an app needs (a *recipe*).
+- **Values** = the **settings you tweak before installing** - replicas, image tag, whether to enable Ingress (the *ingredient amounts* in the recipe).
+- **Release** = the **installed copy** running on your cluster. You can install the same chart many times (dev, staging, prod) - each is a separate release (a *cooked meal*).
+- **Repository** = the **store/shelf** where charts are published and shared (a *cookbook*).
+
+The magic: because Helm remembers every install/upgrade as a numbered **revision**, you can `helm rollback` to a previous version in one command - like hitting "undo" on a whole application.
+
+```mermaid
+flowchart LR
+    CHART[" Chart<br/>templates/*.yaml"] --> RENDER
+    VALUES[" values.yaml<br/>(+ --set overrides)"] --> RENDER
+    RENDER["Helm renders<br/>templates + values"] --> MANIFESTS["Final K8s manifests<br/>(plain YAML)"]
+    MANIFESTS -->|"helm install / upgrade"| RELEASE[" Release<br/>(running instance,<br/>revision 1, 2, 3...)"]
+    RELEASE -. "helm rollback" .-> RELEASE
+```
+
 ## The Problem - YAML Hell
 
 Imagine deploying a real application to Kubernetes. You need:
@@ -25,18 +59,18 @@ Now multiply that by 3 environments (dev, staging, prod) where each has slightly
 
 **Problems:**
 1. Too many YAML files to manage manually
-2. No versioning -- can't easily rollback a deployment
-3. No templating -- duplicate YAML everywhere
-4. No dependency management -- "install A before B"
+2. No versioning - can't easily rollback a deployment
+3. No templating - duplicate YAML everywhere
+4. No dependency management - "install A before B"
 5. Sharing configurations is painful
 
-**Solution:** Helm -- the package manager for Kubernetes.
+**Solution:** Helm - the package manager for Kubernetes.
 
 ---
 
 ## What Is Helm?
 
-Helm is like `apt` for Ubuntu, `brew` for macOS, or `npm` for Node.js -- but for Kubernetes.
+Helm is like `apt` for Ubuntu, `brew` for macOS, or `npm` for Node.js - but for Kubernetes.
 
 ```
 ┌──────────── Without Helm ──────────┐    ┌──────────── With Helm ─────────────┐
@@ -146,9 +180,9 @@ helm search hub prometheus
 ```bash
 # Basic install
 helm install my-nginx bitnami/nginx
-#           ↑           ↑
-#        release      chart
-#        name         name
+#            ^^^^^^^^  ^^^^^^^^^^^^^
+#            release   chart
+#            name      name (repo/chart)
 
 # Install in a specific namespace
 helm install my-nginx bitnami/nginx -n web --create-namespace
@@ -504,6 +538,47 @@ helm install cert-manager jetstack/cert-manager \
 
 ---
 
+## Common Mistakes
+
+1. **Confusing chart version with app version.** In `Chart.yaml`, `version` is the *chart's* version (bump it when you change templates); `appVersion` is the *application's* version (your image). They move independently.
+2. **Forgetting `helm repo update`.** After `helm repo add`, your local cache may be stale. Run `helm repo update` (the equivalent of `apt update`) before searching or installing, or you'll get old chart versions.
+3. **Editing live resources with `kubectl` instead of Helm.** If you `kubectl edit` something Helm manages, the next `helm upgrade` will overwrite your change. Change `values.yaml` (or `--set`) and upgrade instead.
+4. **Whitespace/templating errors.** Go templates are picky. Use `{{-` to trim leading whitespace and always preview with `helm template` or `helm install --dry-run --debug` before applying for real.
+5. **Hardcoding values into templates.** The whole point is reuse - put anything that differs between environments into `values.yaml` and reference it with `{{ .Values.x }}`, then use per-environment values files.
+
+## Quick Self-Check
+
+1. In Helm terms, what is the difference between a **chart** and a **release**?
+2. Which file holds the default configuration that templates read with `{{ .Values.x }}`?
+3. What single command reverts a release to a previous revision?
+4. How do you preview the YAML a chart will produce *without* installing it?
+5. You need to deploy the same chart to dev and prod with different replica counts. What's the Helm-idiomatic way?
+
+<details>
+<summary>Answers</summary>
+
+1. A **chart** is the reusable package/template; a **release** is one deployed, running instance of that chart (you can have many releases from one chart).
+2. `values.yaml` (overridable with `--set` or `-f another-values.yaml`).
+3. `helm rollback <release> <revision>`.
+4. `helm template <release> <chart>` (or `helm install ... --dry-run --debug`).
+5. Use one chart with two values files - `helm install ... -f values-dev.yaml` and `-f values-prod.yaml`.
+
+</details>
+
+---
+
+## Summary
+
+- Helm is the **package manager / app store for Kubernetes** - it ends "YAML hell" by packaging templated manifests into reusable **charts**.
+- **Chart** = recipe, **Values** = ingredient amounts, **Release** = the cooked meal, **Repository** = the cookbook.
+- Core lifecycle: `helm install` -> `helm upgrade` -> `helm rollback` -> `helm uninstall`, with every step tracked as a numbered revision.
+- Templates use Go syntax (`{{ .Values.x }}`, `if`, `range`); always preview with `helm template`, `--dry-run`, and validate with `helm lint`.
+- One chart + multiple values files = one app, many environments.
+
+**Next up ->** First put this into practice in the [Helm Demo - Build, Deploy, Upgrade, Rollback](demo.md). This is the last numbered day of the Kubernetes module, so once the demo is done you have completed the K8s journey - head back to the [Kubernetes Module README](../README.md) to review the full roadmap and pick your next module.
+
+---
+
 > **Hands-On Demo:** [Helm Demo - Build, Deploy, Upgrade, Rollback](demo.md)
 
-**Previous:** [<-- Day 23 - Network Policies](../day23-network-policies/notes.md) | **Next:** [Day 25 - Monitoring & Logging -->](../day25-monitoring-logging/notes.md)
+**Previous:** [<-- Day 19 - DaemonSets, Jobs & CronJobs](../day19-daemonsets-jobs-cronjobs/notes.md) | **Next:** [Kubernetes Module README -->](../README.md)

@@ -1,10 +1,54 @@
 # Day 15 - StatefulSets Demo
 
+> **Goal:** Deploy a real StatefulSet on a local cluster and *prove with your own eyes* every guarantee from Day 14 - ordered pods, stable DNS, per-pod storage, and data that survives deletion.
+
 > **Pre-requisite:** Make sure you've read [Day 14 - StatefulSets Theory](../day14-statefulsets/notes.md)
 >
 > **For production demos on EKS:** See [StatefulSet Demo (EKS / Production - PostgreSQL)](eks-demo.md)
 
 In this hands-on demo, we'll deploy a StatefulSet step by step and prove every feature we learned in theory: ordered creation, stable network identity, per-pod persistent storage, and data persistence across pod restarts.
+
+---
+
+## Learning Objectives
+
+By the end of this lab you will be able to:
+
+- Deploy a **headless Service + StatefulSet** from scratch
+- Watch **ordered** pod creation (`web-0`, then `web-1`, then `web-2`)
+- Confirm each pod got its **own PVC** automatically
+- Test **stable DNS** between pods with `nslookup`
+- Prove **per-pod persistence** survives a pod delete and a full StatefulSet delete
+- Scale up/down and see PVCs **retained**
+
+---
+
+## Real-World Analogy (quick recall)
+
+A StatefulSet is a team of **permanent employees with ID badges and assigned desks**. Each `web-N` has a fixed name, their **own locker** (`PVC www-web-N`), and a **direct desk phone** (DNS `web-N.nginx-headless`). In this lab we hire them one by one and prove each keeps their own drawer of stuff - even after we "fire" and "re-hire" them.
+
+---
+
+## What We're Building
+
+```mermaid
+flowchart TB
+    SVC[" Headless Service: nginx-headless<br/>clusterIP: None"]
+    SVC -.DNS.-> P0 & P1 & P2
+    subgraph STS["StatefulSet: web (replicas 3)"]
+      P0[" web-0"]
+      P1[" web-1"]
+      P2[" web-2"]
+    end
+    P0 --> Q0[" www-web-0 "]
+    P1 --> Q1[" www-web-1 "]
+    P2 --> Q2[" www-web-2 "]
+
+    classDef pod fill:#dbeafe,stroke:#2563eb;
+    classDef pvc fill:#fef9c3,stroke:#ca8a04;
+    class P0,P1,P2 pod;
+    class Q0,Q1,Q2 pvc;
+```
 
 ---
 
@@ -500,5 +544,47 @@ kubectl delete namespace sts-demo
 
 ---
 
+## Common Mistakes
+
+1. **No default StorageClass.** With no class (and none set in `volumeClaimTemplates`), the per-pod PVCs sit `Pending` and pods never start. Run `kubectl get storageclass`.
+2. **`serviceName` ≠ the headless Service name.** `web-0.nginx-headless` won't resolve. `spec.serviceName` must equal the Service's `metadata.name`.
+3. **Forgetting `clusterIP: None`.** A normal Service breaks per-pod DNS - the governing Service must be **headless**.
+4. **Thinking `kubectl delete pod web-1` loses data.** It doesn't - the recreated `web-1` re-attaches `www-web-1`. That's the whole point of a StatefulSet.
+5. **Leaving orphaned PVCs after cleanup.** Deleting the StatefulSet keeps the PVCs. Either delete them (`kubectl delete pvc -l app=nginx -n sts-demo`) or delete the whole namespace.
+
+---
+
+## Quick Self-Check
+
+1. After `kubectl apply`, in what order do `web-0`, `web-1`, `web-2` become Ready?
+2. You wrote "Hello from web-1" into web-1, deleted the pod, and it restarted. What does `index.html` say now, and why?
+3. What value does `kubectl get svc nginx-headless` show under `CLUSTER-IP`, and what does it signify?
+4. You scale from 5 to 3. How many PVCs remain, and which pods were removed first?
+5. After `kubectl delete statefulset web` (without deleting the namespace), what still exists and how do you remove it?
+
+<details>
+<summary>Answers</summary>
+
+1. **0, then 1, then 2**, each becoming Ready before the next starts (ordered creation).
+2. `Hello from web-1` - the recreated pod keeps the **same name** and re-attaches its **own PVC** `www-web-1`, so its data returns.
+3. `None` - meaning the Service is **headless**, giving stable per-pod DNS instead of a single load-balanced VIP.
+4. **5 PVCs remain** (`www-web-0..4`); pods `web-4` then `web-3` were removed (reverse order). PVCs are retained by design.
+5. The **PVCs** (`www-web-*`) still exist. Remove them with `kubectl delete pvc -l app=nginx -n sts-demo` (or delete the namespace).
+
+</details>
+
+---
+
+## Summary
+
+- A headless Service + StatefulSet gives **ordered pods, per-pod PVCs, and stable DNS** with zero manual PVC creation.
+- Deleting a pod keeps its identity and storage (`web-1` stays bound to `www-web-1`).
+- Scale-down and StatefulSet deletion both **retain PVCs** - clean them up explicitly (or drop the namespace).
+- You proved persistence and identity hands-on.
+
+---
+
+**Next up ->** [Day 15 - StatefulSets on EKS (Production PostgreSQL)](eks-demo.md) - run this for real with EBS-backed per-pod volumes.
+
 **Previous:** [<-- Day 14 - StatefulSets (Theory)](../day14-statefulsets/notes.md)
-**Next:** [Day 16 - Ingress -->](../day16-ingress/notes.md)
+**Next:** [Day 16 - Resource Management and Autoscaling -->](../day16-resource-management-autoscaling/notes.md)

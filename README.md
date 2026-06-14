@@ -25,8 +25,8 @@ flowchart LR
 
 | Animation | What it teaches |
 |---|---|
-| [**Architecture Explorer**](animations/k8s-architecture.html) | Click each component (api-server, etcd, scheduler, kubelet…) to learn its job |
-| [**Self-Healing & Auto-Scaling**](animations/k8s-self-healing.html) | Crash pods and watch Kubernetes restore desired state automatically |
+| [**Architecture Explorer**](https://siva9800.github.io/devops-animations/k8s/k8s-architecture.html) | Click each component (api-server, etcd, scheduler, kubelet…) to learn its job |
+| [**Self-Healing & Auto-Scaling**](https://siva9800.github.io/devops-animations/k8s/k8s-self-healing.html) | Crash pods and watch Kubernetes restore desired state automatically |
 
 ---
 
@@ -76,7 +76,7 @@ flowchart LR
 ## How to Use This Module
 1. **Follow day by day** - each concept builds on the previous.
 2. **Type the commands yourself** - build muscle memory.
-3. **Break things on purpose** - delete pods, crash containers, watch K8s recover (try the [self-healing animation](animations/k8s-self-healing.html) first!).
+3. **Break things on purpose** - delete pods, crash containers, watch K8s recover (try the [self-healing animation](https://siva9800.github.io/devops-animations/k8s/k8s-self-healing.html) first!).
 4. **Read the YAML** - understanding YAML structure is key to mastering K8s.
 
 ## kubectl Cheat Sheet

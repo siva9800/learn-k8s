@@ -441,4 +441,4 @@ kubectl delete pod backend frontend stranger
 - When locking **egress**, always allow **DNS (port 53, UDP and TCP) to kube-system**, or name resolution breaks.
 - Always **test** with `wget`/`curl` between pods before and after applying. Blocked traffic hangs and times out.
 
-**Next up ->** [Day 22 - Monitoring and Logging](../day22-monitoring-logging/notes.md)
+**Next up ->** [Day 21 - Monitoring and Logging](../day21-monitoring-logging/notes.md)

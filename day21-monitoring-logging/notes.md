@@ -1,4 +1,4 @@
-# Day 22 - Monitoring and Logging
+# Day 21 - Monitoring and Logging
 
 > **Goal:** Learn how to *see inside* a running cluster - collecting **metrics**, **logs**, and **traces** so you know what is happening, get warned before things break, and can find the cause when they do.
 
@@ -347,4 +347,4 @@ readinessProbe:
 - **Logging follows one pattern:** a log agent DaemonSet on every node ships logs to a central store, queried in one UI - EFK (Fluentd/Fluent Bit + Elasticsearch + Kibana) or the lighter PLG (Promtail + Loki + Grafana).
 - **Probes let Kubernetes self-heal:** liveness restarts a stuck container, readiness gates traffic, startup protects slow-starting apps.
 
-**Next up ->** [Day 24 - Helm](../day24-helm/notes.md)
+**Next up ->** [Day 22 - Helm](../day22-helm/notes.md)

@@ -1,8 +1,8 @@
-# Day 24 - Helm Demo (Hands-On)
+# Day 22 - Helm Demo (Hands-On)
 
 > **Goal:** Build a Helm chart from scratch, then **install -> test -> upgrade -> roll back -> uninstall** it - the full release lifecycle in your own hands.
 
-> **Pre-requisite:** [Day 24 - Helm Theory](notes.md)
+> **Pre-requisite:** [Day 22 - Helm Theory](notes.md)
 
 ## Learning Objectives
 
@@ -649,4 +649,4 @@ rm -rf my-webapp
 
 ---
 
-**Theory:** [Day 24 - Helm](notes.md)
+**Theory:** [Day 22 - Helm](notes.md)

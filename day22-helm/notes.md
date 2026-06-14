@@ -1,4 +1,4 @@
-# Day 24 - Helm
+# Day 22 - Helm
 
 > **Goal:** Understand Helm as the **package manager for Kubernetes** - and learn how charts, values, and releases let you install, upgrade, and roll back whole applications with one command.
 

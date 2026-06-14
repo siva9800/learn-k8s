@@ -68,8 +68,8 @@ flowchart LR
 | [Day 18](day18-ingress-demo/notes.md) | **Ingress** | Hands-On | HTTP routing, host/path rules, TLS; [EKS demo](day18-ingress-demo/eks-demo.md) |
 | [Day 19](day19-daemonsets-jobs-cronjobs/notes.md) | **DaemonSets, Jobs & CronJobs** | Theory + Lab | One-pod-per-node, batch & scheduled tasks |
 | [Day 20](day20-network-policies/notes.md) | **Network Policies** | Theory + Lab | Pod-to-pod firewalls, default-deny, CNI requirement |
-| [Day 22](day22-monitoring-logging/notes.md) | **Monitoring & Logging** | Theory + Lab | Prometheus, Grafana, alerting, log aggregation, probes |
-| [Day 24](day24-helm/notes.md) | **Helm** | Theory + Lab | Package manager for K8s; [demo](day24-helm/demo.md) |
+| [Day 21](day21-monitoring-logging/notes.md) | **Monitoring & Logging** | Theory + Lab | Prometheus, Grafana, alerting, log aggregation, probes |
+| [Day 22](day22-helm/notes.md) | **Helm** | Theory + Lab | Package manager for K8s; [demo](day22-helm/demo.md) |
 
 ---
 
@@ -112,6 +112,12 @@ By the end you'll be able to:
 - Expose apps with Services and Ingress
 - Manage config, secrets, storage, and stateful apps
 - Package apps with Helm and run on managed K8s (EKS)
+
+---
+
+## Reference manifests
+
+The [`Manifest-files/`](Manifest-files/) folder holds ready-to-use YAML you can copy during the labs - Pods, ReplicaSets, Deployments, Services, PV/PVC, a StatefulSet with a headless Service, EBS StorageClass examples, and a small Helm chart (`my-webapp/`). Use them as starting points rather than typing every manifest from scratch.
 
 ---
 

@@ -142,7 +142,7 @@ Expected on success: `cluster-info` shows the API URL, nodes are `Ready`, and `k
 
 ## Granting Access to Other People / Roles
 
-**The most common surprise:** *you* can connect (you created the cluster and got admin), but a teammate or a CI role gets **Unauthorized**. That's because **creating a cluster grants access only to the creator.** Everyone else must be added.
+**The most common surprise:** *you* can connect (you created the cluster and, by default, got admin), but a teammate or a CI role gets **Unauthorized**. That's because **creating a cluster grants access only to the creator** - and even that is optional (see [What if the creator was NOT granted admin?](#what-if-the-creator-was-not-granted-admin)). Everyone else must be added.
 
 There are two mechanisms - use **Access Entries** (modern) unless you're on a legacy cluster.
 
@@ -172,6 +172,64 @@ Common AWS-managed access policies:
 | `AmazonEKSViewPolicy` | Read-only |
 
 > **Why this is better than the old way:** it's a real AWS API (auditable, IaC-friendly, no risk of corrupting a shared YAML). Requires the cluster's **authentication mode** to include the EKS API (see [00 Step 1.2](00-eks-console-walkthrough.md#12-cluster-access-who-can-administer-it)).
+
+### What if the creator was NOT granted admin?
+
+When you create the cluster, you choose whether the **creating IAM principal** is automatically given cluster-admin:
+
+| Where | Setting |
+|-------|---------|
+| Console | "Bootstrap cluster administrator access" = Allow / **Disallow** ([00 Step 1.2](00-eks-console-walkthrough.md#12-cluster-access-who-can-administer-it)) |
+| AWS CLI | `--access-config bootstrapClusterCreatorAdminPermissions=true` (or `=false`) |
+| Terraform module | `enable_cluster_creator_admin_permissions = true` (or `false`) |
+
+If you set this to **Disallow / false**, then right after creation **no IAM identity has Kubernetes access - not even you.** `kubectl get nodes` returns `Unauthorized` for everyone. This is intentional: some teams want access granted **only explicitly** (through IaC/a review process), so that "whoever happened to run `terraform apply`" is not silently a cluster admin.
+
+**The crucial point - you are NOT locked out.** Access Entries are managed through the **AWS API, which is governed by IAM - not by kubectl / Kubernetes RBAC.** So any IAM principal that holds the EKS permissions (`eks:CreateAccessEntry`, `eks:AssociateAccessPolicy`) can grant admin to the right principal, even when nobody has `kubectl` access yet.
+
+> **Analogy:** with the old `aws-auth` ConfigMap, the keycard machine was **inside the building** - if you lost every admin mapping, you were locked out (you needed `kubectl` to fix `kubectl` access). With Access Entries, the keycard machine is at the **AWS front desk (IAM)** - an AWS admin can always issue a card, so a fresh cluster with no admin is recoverable, not bricked.
+
+So the deliberate flow when creator-admin is disabled: grant admin to your **intended** principal from any host with suitable IAM permissions:
+
+```bash
+# Grant cluster-admin to a DEDICATED admin role (not an individual, not the CI build role)
+aws eks create-access-entry \
+  --cluster-name my-cluster \
+  --principal-arn arn:aws:iam::111122223333:role/platform-admins
+
+aws eks associate-access-policy \
+  --cluster-name my-cluster \
+  --principal-arn arn:aws:iam::111122223333:role/platform-admins \
+  --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy \
+  --access-scope type=cluster
+```
+
+Then someone assuming `platform-admins` runs `aws eks update-kubeconfig` and has admin.
+
+**In Terraform**, do it declaratively so the cluster is never without an admin - disable the creator grant and define the access entry in the same apply:
+
+```hcl
+module "eks" {
+  # ...
+  enable_cluster_creator_admin_permissions = false   # no implicit admin for the applier
+
+  access_entries = {
+    platform_admins = {
+      principal_arn = "arn:aws:iam::111122223333:role/platform-admins"
+      policy_associations = {
+        admin = {
+          policy_arn   = "arn:aws:eks::aws:cluster-access-policy/AmazonEKSClusterAdminPolicy"
+          access_scope = { type = "cluster" }
+        }
+      }
+    }
+  }
+}
+```
+
+**Why do this in production:** access becomes **declarative and auditable**, it **survives** regardless of who ran the apply, and **no human is implicitly admin** just for having created the cluster once - the essence of least privilege.
+
+> **One real lock-out risk:** this recovery only works when the cluster's **authentication mode includes the EKS API** (`API` or `API_AND_CONFIG_MAP`). A **ConfigMap-only** cluster with bootstrap admin **disabled** genuinely can lock everyone out - yet another reason to prefer the EKS API auth mode (see [00 Step 1.2](00-eks-console-walkthrough.md#12-cluster-access-who-can-administer-it)).
 
 ### Legacy way: the `aws-auth` ConfigMap
 
@@ -343,6 +401,7 @@ aws eks associate-access-policy --cluster-name <c> --principal-arn <arn> \
 4. `kubectl get nodes` hangs and times out. What are the two most likely causes?
 5. How would you reach the API of a **private-only** cluster from your laptop?
 6. Why should CI/CD use OIDC role assumption instead of stored AWS keys?
+7. You created a cluster with **bootstrap admin disabled** and now nobody can `kubectl`. Are you locked out? Explain why Access Entries save you (and the one case where you truly could be locked out).
 
 ---
 

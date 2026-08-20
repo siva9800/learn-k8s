@@ -138,6 +138,10 @@ module "eks" {
   # --- Modern auth: Access Entries instead of the fragile aws-auth ConfigMap. ---
   authentication_mode                      = "API_AND_CONFIG_MAP"
   enable_cluster_creator_admin_permissions = true # whoever applies gets admin
+  # For least privilege, set this to false and grant admin to a dedicated role via
+  # an `access_entries` block instead - see 05-connecting-to-the-cluster.md
+  # ("What if the creator was NOT granted admin?"). You are not locked out: access
+  # entries are governed by AWS IAM, not kubectl.
 
   # --- Managed node group in private subnets. ---
   eks_managed_node_group_defaults = {

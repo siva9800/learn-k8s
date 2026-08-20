@@ -194,6 +194,32 @@ echo -n 'S3cr3t!' | base64        # -> UzNjcjN0IQ==
 echo 'UzNjcjN0IQ==' | base64 -d   # -> S3cr3t!   (decoded right back)
 ```
 
+### But WHY base64 at all? (the real reason)
+
+If base64 gives **zero** security, why does Kubernetes bother encoding at all? The answer has **nothing to do with secrecy** - it's about **safely carrying *any* bytes through text-only systems.**
+
+> **Analogy: shipping a fragile item by postcard.**
+> A postcard (YAML/JSON) can only carry **plain printable text**. But a secret might be a TLS private key, a `.p12` certificate, or a password containing newlines, tabs, null bytes, or emoji. You can't write raw binary on a postcard - it gets mangled. So you **translate the bytes into a safe alphabet** (A-Z, a-z, 0-9, `+`, `/`) that survives any postcard, any language, any mail system. That translation is base64. The postcard is still readable by anyone - it was never about hiding.
+
+Concretely, base64 exists in Secrets because:
+
+1. **Secrets can hold arbitrary binary data**, not just strings - certificates, keystores, SSH keys, `.pfx` files. Raw binary bytes are **not valid inside YAML or JSON** (they can contain control characters, null bytes, or byte sequences that aren't valid UTF-8).
+2. **The whole Kubernetes pipeline is text/JSON.** Your YAML → `kubectl` → the API server → **etcd** all move data as JSON. base64 guarantees every byte survives that journey **unchanged** - no encoding corruption, no "it worked on my machine."
+3. **It's a transport/serialization format, not a security control** - exactly like base64 in email attachments or `data:` URLs. The `data:` field is base64; the convenience field `stringData:` just base64-encodes *for* you at apply time.
+
+```mermaid
+flowchart LR
+    A["Raw secret bytes<br/>(may be binary:<br/>TLS key, .p12, ...)"] -->|base64 encode| B["Safe text<br/>(A-Z a-z 0-9 + /)"]
+    B -->|"stored in"| C["YAML / JSON"]
+    C --> D["API server"]
+    D --> E[("etcd")]
+    E -->|base64 decode| F["Container sees<br/>ORIGINAL bytes<br/>as env var / file"]
+    style A fill:#3a1a1a,stroke:#e06c75,color:#fff
+    style F fill:#0d2818,stroke:#3fb950,color:#fff
+```
+
+**Takeaway:** base64 answers *"how do I safely store these bytes?"* - **not** *"how do I keep them secret?"* Secrecy is a **separate** job handled by encryption-at-rest + RBAC + external managers (below).
+
 To make Secrets **actually** secure, you must additionally:
 - Enable **encryption at rest** (etcd encryption) on the cluster, and/or
 - Use an external secrets manager (HashiCorp Vault, AWS/GCP/Azure secret stores), and
@@ -311,6 +337,114 @@ spec:
 
 ---
 
+## Secrets + RBAC — What "Stricter Access Control" Actually Means
+
+The table below says a Secret "can have stricter access controls" than a ConfigMap. That single line hides an important idea, so let's unpack it properly.
+
+### RBAC in one picture
+
+**RBAC = Role-Based Access Control.** It answers one question: **"WHO is allowed to do WHAT to WHICH resources?"**
+
+> **Analogy: a hotel keycard system.**
+> Every keycard (a **ServiceAccount** or user) opens only the doors it's been programmed for. A cleaner's card opens guest rooms but **not** the safe room or the cash office. In Kubernetes, a Pod runs as a **ServiceAccount** (its keycard), and a **Role** is the list of doors that card opens. "Stricter access control on Secrets" means: *program the cards so almost nobody's card opens the Secrets room.*
+
+RBAC has three pieces:
+
+```mermaid
+flowchart LR
+    SA["Subject<br/>(ServiceAccount / user)<br/>= the keycard"] -->|RoleBinding<br/>'link card to permissions'| R["Role<br/>= list of allowed doors<br/>(verbs on resources)"]
+    R -->|grants access to| RES["Resources<br/>secrets, configmaps, pods..."]
+    style SA fill:#0a1a3a,stroke:#5b8def,color:#fff
+    style R fill:#2a1a3a,stroke:#b48ead,color:#fff
+    style RES fill:#0d2818,stroke:#3fb950,color:#fff
+```
+
+- **Role** (or **ClusterRole**) — a list of *allowed actions*: which **verbs** (`get`, `list`, `watch`, `create`, `update`, `delete`) on which **resources** (`secrets`, `configmaps`, `pods`…).
+- **RoleBinding** (or **ClusterRoleBinding**) — glues a Role to a **subject** (a ServiceAccount, user, or group).
+- **ServiceAccount** — the identity a Pod runs as. If you don't set one, Pods use the namespace's `default` ServiceAccount.
+
+### Why Secrets deserve *their own, tighter* rules
+
+Here's the key insight: **`secrets` is a distinct resource type in RBAC, separate from `configmaps`.** That means you can grant someone full access to ConfigMaps while giving them **zero** access to Secrets - even in the same namespace. This is the whole point of "stricter access control."
+
+A common real-world mistake is being too generous:
+
+```yaml
+# ❌ TOO BROAD — this Role can read EVERY Secret in the namespace
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: team-a
+  name: reads-everything
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  verbs: ["get", "list", "watch"]     # can dump ALL secrets
+```
+
+Anyone bound to that Role can run `kubectl get secrets -o yaml` and walk away with every password in the namespace. Least-privilege says: **scope it down to the exact Secret needed.**
+
+```yaml
+# ✅ LEAST PRIVILEGE — can read ONLY the one Secret it needs, nothing else
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  namespace: team-a
+  name: read-db-secret-only
+rules:
+- apiGroups: [""]
+  resources: ["secrets"]
+  resourceNames: ["db-secret"]        # ← locked to a single named Secret
+  verbs: ["get"]                      # ← read one, can't 'list' them all
+```
+
+```yaml
+# Bind that narrow Role to a specific ServiceAccount (the app's "keycard")
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  namespace: team-a
+  name: app-reads-db-secret
+subjects:
+- kind: ServiceAccount
+  name: myapp-sa
+  namespace: team-a
+roleRef:
+  kind: Role
+  name: read-db-secret-only
+  apiGroup: rbac.authorization.k8s.io
+```
+
+> ⚠️ **Subtle but important:** `get` with `resourceNames` lets you fetch a Secret *if you already know its name*, but **not** `list` them. Granting `list`/`watch` on `secrets` effectively exposes **all** of them - so hand those verbs out very sparingly.
+
+### Practical RBAC rules of thumb for Secrets
+
+1. **Separate the verbs.** Reserve `list`/`watch` on `secrets` for a tiny set of trusted controllers. Most apps only need `get` on one named Secret - and usually not even that (they get it via an env var / volume mount, which the **kubelet** reads on their behalf, so the Pod itself needs no `get` permission at all).
+2. **One ServiceAccount per app.** Don't let everything share the `default` SA. A dedicated SA = a keycard you can scope precisely and revoke independently.
+3. **Namespaces are your first fence.** A `Role`/`RoleBinding` is namespace-scoped, so put sensitive workloads in their own namespace and keep cross-namespace access out with `ClusterRole` only where truly needed.
+4. **Audit who can read secrets.** Test any identity with:
+   ```bash
+   # Can this ServiceAccount read secrets in this namespace?
+   kubectl auth can-i get secrets --as=system:serviceaccount:team-a:myapp-sa -n team-a
+   kubectl auth can-i list secrets --as=system:serviceaccount:team-a:myapp-sa -n team-a
+   ```
+5. **Remember: cluster-admins can still read everything.** RBAC limits *most* users, but a cluster-admin (and anyone who can read etcd) can see decoded Secrets. That's exactly why encryption-at-rest and **external secret managers** exist - see the companion file below.
+
+> 📎 There's a whole day on this later: **[Day 17 - RBAC & Cluster Security](../day17-rbac-security/notes.md)**. Here we only cover *how RBAC applies to Secrets specifically*.
+
+---
+
+## 🏭 Going to Production: External Secrets & Real-World Patterns
+
+Everything above is enough for a demo cluster. **Real production** almost never stores raw Secrets in Git or relies on base64 alone. Instead teams use **encryption-at-rest**, an **external secrets manager** (AWS Secrets Manager, Vault, Azure Key Vault…), and tools that **sync** those into Kubernetes automatically.
+
+Because that's a big topic on its own, it lives in a dedicated companion file:
+
+> ### 👉 **[Production-Grade Secrets & Config Management →](production-secrets.md)**
+> Covers: encryption-at-rest (etcd + KMS) · **External Secrets Operator (ESO)** · **Secrets Store CSI Driver** · **Sealed Secrets** · **SOPS** · **HashiCorp Vault** · GitOps-safe patterns · a decision guide for choosing between them.
+
+---
+
 ## ConfigMap vs Secret
 
 | Feature | ConfigMap | Secret |
@@ -319,12 +453,12 @@ spec:
 | **Stored as** | Plain text | Base64 encoded |
 | **Size limit** | 1 MB | 1 MB |
 | **Example data** | DB host, log level, feature flags | Passwords, API keys, TLS certs |
-| **RBAC** | Standard | Can have stricter access controls |
+| **RBAC** | Standard | Can have stricter access controls ([see above](#secrets--rbac--what-stricter-access-control-actually-means)) |
 
 **Important:** Base64 is NOT encryption! Anyone can decode it. For real security, use:
-- Kubernetes RBAC (restrict who can read secrets)
-- Encrypted etcd (encrypt secrets at rest)
-- External secret managers (AWS Secrets Manager, HashiCorp Vault)
+- Kubernetes RBAC (restrict who can read secrets) — [explained above](#secrets--rbac--what-stricter-access-control-actually-means)
+- Encrypted etcd (encrypt secrets at rest) — [companion file](production-secrets.md)
+- External secret managers (AWS Secrets Manager, HashiCorp Vault) — [companion file](production-secrets.md)
 
 ---
 
@@ -401,6 +535,9 @@ kubectl logs config-test
 3. **True or false:** Kubernetes Secrets are encrypted by default. Explain your answer.
 4. What does `stringData:` do that `data:` doesn't?
 5. You changed a ConfigMap used as env vars, but the running Pod still shows the old value. Why, and how do you fix it?
+6. If base64 gives no security, **why does Kubernetes encode Secrets in base64 at all?**
+7. Why is granting `list` on `secrets` far more dangerous than granting `get` with a `resourceNames` restriction?
+8. Name two production tools/patterns that keep the *real* secret out of Git and out of etcd, and one sentence on how each works. (See the [companion file](production-secrets.md).)
 
 ---
 
@@ -418,8 +555,10 @@ Next up → [Day 11 - Amazon EKS](../day11-eks/notes.md)
 2. **ConfigMap** = non-sensitive configuration (DB host, feature flags, config files)
 3. **Secret** = sensitive data (passwords, API keys, TLS certificates)
 4. Both can be used as **environment variables** or **volume mounts**
-5. **Base64 is not encryption** - use proper secret management in production
+5. **Base64 is not encryption** - it's a *transport format* for arbitrary/binary bytes. Use proper secret management in production
 6. **`stringData`** in Secrets lets you write plain text (K8s encodes it for you)
+7. **RBAC on `secrets` is separate from `configmaps`** - scope reads to a single named Secret (`resourceNames`), and guard `list`/`watch` closely
+8. **In production, don't store raw Secrets** - use encryption-at-rest + an external manager → [production-secrets.md](production-secrets.md)
 
 ---
 

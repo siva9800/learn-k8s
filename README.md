@@ -57,8 +57,8 @@ flowchart LR
 | [Day 07](day07-services/notes.md) | **Services & Networking** | Theory | ClusterIP, NodePort, LoadBalancer, Headless |
 | [Day 08](day08-services-demo/notes.md) | **Services Demo** | Hands-On | All service types, DNS discovery, load balancing |
 | [Day 09](day09-namespaces/notes.md) | **Namespaces** | Theory + Lab | Organizing & isolating resources |
-| [Day 10](day10-configmaps-secrets/notes.md) | **ConfigMaps & Secrets** | Theory + Lab | Externalizing config; managing sensitive data |
-| [Day 11](day11-eks/notes.md) | **EKS (Managed K8s on AWS)** | Cloud | Managed control plane, [node groups](day11-eks/managed-nodegroups/notes.md) |
+| [Day 10](day10-configmaps-secrets/notes.md) | **ConfigMaps & Secrets** | Theory + Lab | Externalizing config; managing sensitive data; [production secrets](day10-configmaps-secrets/production-secrets.md) (ESO, Vault, Sealed Secrets, SOPS) |
+| [Day 11](day11-eks/notes.md) | **EKS (Managed K8s on AWS)** | Cloud | Managed control plane, [node groups](day11-eks/managed-nodegroups/notes.md); full [cluster-creation guide](day11-eks/eks-cluster-creation/README.md) (manual · deep-dive · best-practices · Terraform) |
 | [Day 12](day12-volumes/notes.md) | **Volumes & Storage** | Theory | PV, PVC, StorageClass; [AWS](day12-volumes/aws-volumes/notes.md) & [NFS](day12-volumes/nfs-volumes/notes.md) |
 | [Day 13](day13-volumes-demo/notes.md) | **Volumes Demo** | Hands-On | Data survives pod deletion; [EKS demo](day13-volumes-demo/eks-demo.md) |
 | [Day 14](day14-statefulsets/notes.md) | **StatefulSets** | Theory | Running stateful apps like databases |

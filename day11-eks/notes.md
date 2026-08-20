@@ -2,6 +2,8 @@
 
 > **Goal:** Move from a single-node Kubernetes on your laptop to a real, production-grade, AWS-managed Kubernetes cluster - and understand exactly what AWS runs for you and what you still own.
 
+> 📦 **Going deeper — full production EKS build:** this page is the overview. For a complete, production-shaped walkthrough (manual setup → config trade-offs → 2026 best practices → working Terraform), see **[eks-cluster-creation/](eks-cluster-creation/README.md)**.
+
 ## Learning Objectives
 
 By the end of this lesson you will be able to:

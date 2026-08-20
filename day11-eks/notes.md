@@ -2,7 +2,7 @@
 
 > **Goal:** Move from a single-node Kubernetes on your laptop to a real, production-grade, AWS-managed Kubernetes cluster - and understand exactly what AWS runs for you and what you still own.
 
-> 📦 **Going deeper — full production EKS build:** this page is the overview. For a complete, production-shaped walkthrough (manual setup → config trade-offs → 2026 best practices → working Terraform), see **[eks-cluster-creation/](eks-cluster-creation/README.md)**.
+> **Going deeper - full production EKS build:** this page is the overview. For a complete, production-shaped walkthrough (manual setup → config trade-offs → 2026 best practices → working Terraform), see **[eks-cluster-creation/](eks-cluster-creation/README.md)**.
 
 ## Learning Objectives
 
@@ -173,9 +173,9 @@ eksctl get cluster
 
 # kubectl is automatically configured
 kubectl get nodes
-# NAME                                           STATUS   ROLES    AGE
-# ip-192-168-1-100.ap-south-1.compute.internal   Ready    <none>   5m
-# ip-192-168-2-200.ap-south-1.compute.internal   Ready    <none>   5m
+# NAME STATUS ROLES AGE
+# ip-192-168-1-100.ap-south-1.compute.internal Ready <none> 5m
+# ip-192-168-2-200.ap-south-1.compute.internal Ready <none> 5m
 
 # Check all namespaces
 kubectl get pods -A
@@ -259,8 +259,8 @@ kubectl expose deployment web --type=LoadBalancer --port=80
 
 # Check the service
 kubectl get svc web
-# NAME   TYPE           CLUSTER-IP    EXTERNAL-IP                              PORT(S)
-# web    LoadBalancer   10.100.0.50   abc123-456.ap-south-1.elb.amazonaws.com  80:31234/TCP
+# NAME TYPE CLUSTER-IP EXTERNAL-IP PORT(S)
+# web LoadBalancer 10.100.0.50 abc123-456.ap-south-1.elb.amazonaws.com 80:31234/TCP
 
 # Access your app via the AWS Load Balancer URL!
 curl http://abc123-456.ap-south-1.elb.amazonaws.com

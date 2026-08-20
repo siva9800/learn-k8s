@@ -12,7 +12,7 @@ flowchart TB
       U["Users"]
     end
     U --> ALB["ALB / NLB<br/>(public subnets, WAF)"]
-    subgraph VPC["VPC — 3 AZs"]
+    subgraph VPC["VPC - 3 AZs"]
       ALB --> ING["Ingress / Gateway API<br/>(AWS LB Controller)"]
       subgraph PRIV["Private subnets (nodes + pods)"]
         ING --> APP["App pods"]
@@ -48,9 +48,9 @@ flowchart TB
 | **Image scanning + signing** | Catch CVEs / supply-chain | ECR scan-on-push, cosign |
 | **Least-privilege RBAC** | Limit `list secrets`, `system:masters` | See [Day 10 Secrets-RBAC](../../day10-configmaps-secrets/notes.md) |
 
-> 🔐 **The IMDSv2 pitfall few know:** if you don't set the metadata hop limit to 1, a compromised pod can reach the node's **instance metadata endpoint** and steal the **node role's** credentials - bypassing all your careful IRSA scoping. Lock it down.
+> **The IMDSv2 pitfall few know:** if you don't set the metadata hop limit to 1, a compromised pod can reach the node's **instance metadata endpoint** and steal the **node role's** credentials - bypassing all your careful IRSA scoping. Lock it down.
 
-> 📎 **Secrets:** the full modern secrets story (ESO, Vault, Sealed Secrets, SOPS, encryption-at-rest) is in [Day 10 → production-secrets.md](../../day10-configmaps-secrets/production-secrets.md). On EKS, the standard is **External Secrets Operator + AWS Secrets Manager + IRSA.**
+> **Secrets:** the full modern secrets story (ESO, Vault, Sealed Secrets, SOPS, encryption-at-rest) is in [Day 10 → production-secrets.md](../../day10-configmaps-secrets/production-secrets.md). On EKS, the standard is **External Secrets Operator + AWS Secrets Manager + IRSA.**
 
 ---
 
@@ -70,7 +70,7 @@ flowchart TB
 **The modern pattern:** **on-demand for baseline + critical, spot for the rest**, mixed by Karpenter with automatic consolidation.
 
 ```yaml
-# Karpenter NodePool — mix spot & on-demand, let Karpenter pick cheapest fit
+# Karpenter NodePool - mix spot & on-demand, let Karpenter pick cheapest fit
 apiVersion: karpenter.sh/v1
 kind: NodePool
 metadata: { name: default }
@@ -112,7 +112,7 @@ flowchart LR
 | **Bin-packing / consolidation** | Limited | **Active consolidation** (repacks to fewer nodes) |
 | **Verdict (2026)** | Legacy but stable | **Recommended default** |
 
-> 💡 **If building today: use Karpenter.** It replaces node-group sprawl, picks cheaper instances automatically, and consolidates underused nodes. Cluster Autoscaler is still fine if you're already invested in it.
+> **If building today: use Karpenter.** It replaces node-group sprawl, picks cheaper instances automatically, and consolidates underused nodes. Cluster Autoscaler is still fine if you're already invested in it.
 
 ---
 
@@ -143,7 +143,7 @@ flowchart LR
 - **Alerts:** Alertmanager → Slack/PagerDuty. Alert on: node `NotReady`, pod crashloops, PVC full, cert expiry, control-plane error rates.
 - **Health signals:** always define **liveness/readiness/startup probes** (see [Day 21 - Monitoring](../../day21-monitoring-logging/notes.md)).
 
-> ⚠️ **Cost discipline:** `audit` logs and high-cardinality Prometheus metrics get expensive fast. Set **log retention**, drop noisy metric labels, and sample where you can.
+> **Cost discipline:** `audit` logs and high-cardinality Prometheus metrics get expensive fast. Set **log retention**, drop noisy metric labels, and sample where you can.
 
 ---
 
@@ -193,7 +193,7 @@ flowchart LR
 
 ---
 
-## 👉 If Building an EKS Cluster **Today (2026)**, This Is the Recommended Setup
+## If Building an EKS Cluster **Today (2026)**, This Is the Recommended Setup
 
 ```mermaid
 flowchart TB

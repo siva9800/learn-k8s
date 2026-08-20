@@ -46,7 +46,7 @@ cluster_name    = "demo-eks"
 cluster_version = "1.30"
 environment     = "dev"
 
-# 🔒 IMPORTANT: lock the API to YOUR IP/VPN — never leave 0.0.0.0/0 in prod.
+# IMPORTANT: lock the API to YOUR IP/VPN - never leave 0.0.0.0/0 in prod.
 public_access_cidrs = ["203.0.113.10/32"]
 
 # Cost knobs
@@ -67,11 +67,11 @@ terraform init      # download modules + providers (+ configure backend)
 terraform fmt       # format
 terraform validate  # static checks
 
-terraform plan -out tfplan   # review — expect ~40-60 resources to add
-terraform apply tfplan       # ⏱️ ~15-20 min (control plane is the slow part)
+terraform plan -out tfplan   # review - expect ~40-60 resources to add
+terraform apply tfplan       #  ~15-20 min (control plane is the slow part)
 ```
 
-> ⏱️ **Be patient:** EKS control-plane creation alone is 10-15 minutes. Node group + add-ons add a few more. This is normal.
+> **Be patient:** EKS control-plane creation alone is 10-15 minutes. Node group + add-ons add a few more. This is normal.
 
 ---
 
@@ -95,15 +95,15 @@ This writes/merges cluster credentials into `~/.kube/config`. Auth uses your **A
 
 ```bash
 kubectl get nodes -o wide
-# NAME                          STATUS   ROLES    AGE   VERSION
-# ip-10-0-x-x.ec2.internal      Ready    <none>   3m    v1.30.x
-# ip-10-0-y-y.ec2.internal      Ready    <none>   3m    v1.30.x
+# NAME STATUS ROLES AGE VERSION
+# ip-10-0-x-x.ec2.internal Ready <none> 3m v1.30.x
+# ip-10-0-y-y.ec2.internal Ready <none> 3m v1.30.x
 
 kubectl get pods -A       # coredns, aws-node (CNI), kube-proxy, ebs-csi → Running
 kubectl cluster-info
 ```
 
-✅ Two `Ready` nodes + system pods `Running` = success.
+ Two `Ready` nodes + system pods `Running` = success.
 
 Quick smoke test:
 ```bash
@@ -121,7 +121,7 @@ kubectl delete deployment,svc hello
 terraform destroy
 ```
 
-> 🕳️ **Destroy pitfall:** if you (or a controller) created **LoadBalancer Services / Ingresses**, AWS made ELBs *outside* Terraform's knowledge → `destroy` can hang on the VPC because ENIs are still attached. **Delete Kubernetes Services of type LoadBalancer first**, then `terraform destroy`.
+> **Destroy pitfall:** if you (or a controller) created **LoadBalancer Services / Ingresses**, AWS made ELBs *outside* Terraform's knowledge → `destroy` can hang on the VPC because ENIs are still attached. **Delete Kubernetes Services of type LoadBalancer first**, then `terraform destroy`.
 
 ---
 

@@ -337,7 +337,7 @@ spec:
 
 ---
 
-## Secrets + RBAC — What "Stricter Access Control" Actually Means
+## Secrets + RBAC - What "Stricter Access Control" Actually Means
 
 The table below says a Secret "can have stricter access controls" than a ConfigMap. That single line hides an important idea, so let's unpack it properly.
 
@@ -359,9 +359,9 @@ flowchart LR
     style RES fill:#0d2818,stroke:#3fb950,color:#fff
 ```
 
-- **Role** (or **ClusterRole**) — a list of *allowed actions*: which **verbs** (`get`, `list`, `watch`, `create`, `update`, `delete`) on which **resources** (`secrets`, `configmaps`, `pods`…).
-- **RoleBinding** (or **ClusterRoleBinding**) — glues a Role to a **subject** (a ServiceAccount, user, or group).
-- **ServiceAccount** — the identity a Pod runs as. If you don't set one, Pods use the namespace's `default` ServiceAccount.
+- **Role** (or **ClusterRole**) - a list of *allowed actions*: which **verbs** (`get`, `list`, `watch`, `create`, `update`, `delete`) on which **resources** (`secrets`, `configmaps`, `pods`…).
+- **RoleBinding** (or **ClusterRoleBinding**) - glues a Role to a **subject** (a ServiceAccount, user, or group).
+- **ServiceAccount** - the identity a Pod runs as. If you don't set one, Pods use the namespace's `default` ServiceAccount.
 
 ### Why Secrets deserve *their own, tighter* rules
 
@@ -370,7 +370,7 @@ Here's the key insight: **`secrets` is a distinct resource type in RBAC, separat
 A common real-world mistake is being too generous:
 
 ```yaml
-# ❌ TOO BROAD — this Role can read EVERY Secret in the namespace
+# TOO BROAD - this Role can read EVERY Secret in the namespace
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -385,7 +385,7 @@ rules:
 Anyone bound to that Role can run `kubectl get secrets -o yaml` and walk away with every password in the namespace. Least-privilege says: **scope it down to the exact Secret needed.**
 
 ```yaml
-# ✅ LEAST PRIVILEGE — can read ONLY the one Secret it needs, nothing else
+# LEAST PRIVILEGE - can read ONLY the one Secret it needs, nothing else
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
@@ -415,7 +415,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
 ```
 
-> ⚠️ **Subtle but important:** `get` with `resourceNames` lets you fetch a Secret *if you already know its name*, but **not** `list` them. Granting `list`/`watch` on `secrets` effectively exposes **all** of them - so hand those verbs out very sparingly.
+> **Subtle but important:** `get` with `resourceNames` lets you fetch a Secret *if you already know its name*, but **not** `list` them. Granting `list`/`watch` on `secrets` effectively exposes **all** of them - so hand those verbs out very sparingly.
 
 ### Practical RBAC rules of thumb for Secrets
 
@@ -430,17 +430,17 @@ roleRef:
    ```
 5. **Remember: cluster-admins can still read everything.** RBAC limits *most* users, but a cluster-admin (and anyone who can read etcd) can see decoded Secrets. That's exactly why encryption-at-rest and **external secret managers** exist - see the companion file below.
 
-> 📎 There's a whole day on this later: **[Day 17 - RBAC & Cluster Security](../day17-rbac-security/notes.md)**. Here we only cover *how RBAC applies to Secrets specifically*.
+> There's a whole day on this later: **[Day 17 - RBAC & Cluster Security](../day17-rbac-security/notes.md)**. Here we only cover *how RBAC applies to Secrets specifically*.
 
 ---
 
-## 🏭 Going to Production: External Secrets & Real-World Patterns
+## Going to Production: External Secrets & Real-World Patterns
 
 Everything above is enough for a demo cluster. **Real production** almost never stores raw Secrets in Git or relies on base64 alone. Instead teams use **encryption-at-rest**, an **external secrets manager** (AWS Secrets Manager, Vault, Azure Key Vault…), and tools that **sync** those into Kubernetes automatically.
 
 Because that's a big topic on its own, it lives in a dedicated companion file:
 
-> ### 👉 **[Production-Grade Secrets & Config Management →](production-secrets.md)**
+> ###  **[Production-Grade Secrets & Config Management →](production-secrets.md)**
 > Covers: encryption-at-rest (etcd + KMS) · **External Secrets Operator (ESO)** · **Secrets Store CSI Driver** · **Sealed Secrets** · **SOPS** · **HashiCorp Vault** · GitOps-safe patterns · a decision guide for choosing between them.
 
 ---
@@ -453,12 +453,12 @@ Because that's a big topic on its own, it lives in a dedicated companion file:
 | **Stored as** | Plain text | Base64 encoded |
 | **Size limit** | 1 MB | 1 MB |
 | **Example data** | DB host, log level, feature flags | Passwords, API keys, TLS certs |
-| **RBAC** | Standard | Can have stricter access controls ([see above](#secrets--rbac--what-stricter-access-control-actually-means)) |
+| **RBAC** | Standard | Can have stricter access controls ([see above](#secrets--rbac---what-stricter-access-control-actually-means)) |
 
 **Important:** Base64 is NOT encryption! Anyone can decode it. For real security, use:
-- Kubernetes RBAC (restrict who can read secrets) — [explained above](#secrets--rbac--what-stricter-access-control-actually-means)
-- Encrypted etcd (encrypt secrets at rest) — [companion file](production-secrets.md)
-- External secret managers (AWS Secrets Manager, HashiCorp Vault) — [companion file](production-secrets.md)
+- Kubernetes RBAC (restrict who can read secrets) - [explained above](#secrets--rbac---what-stricter-access-control-actually-means)
+- Encrypted etcd (encrypt secrets at rest) - [companion file](production-secrets.md)
+- External secret managers (AWS Secrets Manager, HashiCorp Vault) - [companion file](production-secrets.md)
 
 ---
 

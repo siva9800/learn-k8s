@@ -8,15 +8,18 @@
 
 ```mermaid
 flowchart LR
-    A["01 · Manual Setup<br/>learn every moving part<br/>(console + CLI)"] --> B["02 · Config Deep Dive<br/>the WHY + trade-offs"]
+    Z["00 · Console Walkthrough<br/>every wizard screen &<br/>option explained"] --> A["01 · Manual Setup<br/>every moving part via CLI"]
+    A --> B["02 · Config Deep Dive<br/>the WHY + trade-offs"]
     B --> C["03 · Best Practices<br/>the 2026 production playbook"]
     C --> D["04 · Terraform<br/>automate the whole thing"]
+    style Z fill:#2a1a3a,stroke:#b48ead,color:#fff
     style A fill:#0d2818,stroke:#3fb950,color:#fff
     style D fill:#0a1a3a,stroke:#5b8def,color:#fff
 ```
 
 | # | File | What you get |
 |---|------|--------------|
+| 00 | [00-eks-console-walkthrough.md](00-eks-console-walkthrough.md) | The **AWS Console "Create cluster" wizard, field by field** - every step, dropdown, and toggle, what each does, what to pick, and what breaks if you get it wrong |
 | 01 | [01-manual-eks-setup.md](01-manual-eks-setup.md) | Step-by-step manual build: IAM, VPC/subnets, endpoint access, nodes, add-ons, logging - **with the reason for each step** |
 | 02 | [02-eks-config-explanation.md](02-eks-config-explanation.md) | Deep dive on VPC design, node groups, IAM/IRSA, CNI/CIDRs, security, storage, observability - **trade-offs** |
 | 03 | [03-eks-best-practices.md](03-eks-best-practices.md) | Modern production playbook: security, cost (spot/Karpenter), scaling, upgrades, GitOps - **"if building today (2026)"** |
@@ -43,4 +46,4 @@ flowchart LR
 
 ---
 
-**Start here → [01 - Manual EKS Setup](01-manual-eks-setup.md)**
+**Start here → [00 - Console Walkthrough](00-eks-console-walkthrough.md)** (visual) or **[01 - Manual EKS Setup](01-manual-eks-setup.md)** (CLI)

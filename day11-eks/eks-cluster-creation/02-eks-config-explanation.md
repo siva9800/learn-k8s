@@ -26,7 +26,7 @@ The VPC CNI assigns **each pod a real VPC IP**. A `t3.medium` can host ~17 pods;
 IPs needed per subnet ≈ (max nodes in that AZ) × (pods per node) + headroom
 ```
 
-> 🕳️ **Real-world failure:** a `/24` private subnet (251 usable IPs) looks fine with 3 nodes, then autoscaling to 12 nodes × 15 pods = 180 IPs + ENIs blows past it → `failed to assign an IP address to container`. **Use `/20` or larger** for node subnets, or adopt **prefix delegation** / **custom networking** to stretch IPs.
+> **Real-world failure:** a `/24` private subnet (251 usable IPs) looks fine with 3 nodes, then autoscaling to 12 nodes × 15 pods = 180 IPs + ENIs blows past it → `failed to assign an IP address to container`. **Use `/20` or larger** for node subnets, or adopt **prefix delegation** / **custom networking** to stretch IPs.
 
 ---
 
@@ -34,11 +34,11 @@ IPs needed per subnet ≈ (max nodes in that AZ) × (pods per node) + headroom
 
 ```mermaid
 flowchart TB
-    subgraph CP["Control Plane — AWS-managed, you can't touch it"]
+    subgraph CP["Control Plane - AWS-managed, you can't touch it"]
       API["kube-apiserver"] --- ETCD[("etcd")]
       SCHED["scheduler"] --- CM["controller-manager"]
     end
-    subgraph DP["Data Plane — YOURS"]
+    subgraph DP["Data Plane - YOURS"]
       N1["Node 1<br/>kubelet + pods"]
       N2["Node 2<br/>kubelet + pods"]
     end
@@ -104,7 +104,7 @@ flowchart LR
 ```
 
 ```yaml
-# The ServiceAccount is annotated with the role ARN — that's the whole trick
+# The ServiceAccount is annotated with the role ARN - that's the whole trick
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -113,7 +113,7 @@ metadata:
     eks.amazonaws.com/role-arn: arn:aws:iam::111122223333:role/read-one-bucket
 ```
 
-> 💡 **Newer alternative - EKS Pod Identity** (2024+): a simpler association API that doesn't require managing OIDC trust policies per role. IRSA is still everywhere and portable; Pod Identity is easier to operate on EKS specifically. For new EKS-only clusters, evaluate Pod Identity; IRSA remains the safe, widely-documented default.
+> **Newer alternative - EKS Pod Identity** (2024+): a simpler association API that doesn't require managing OIDC trust policies per role. IRSA is still everywhere and portable; Pod Identity is easier to operate on EKS specifically. For new EKS-only clusters, evaluate Pod Identity; IRSA remains the safe, widely-documented default.
 
 ---
 
@@ -123,7 +123,7 @@ metadata:
 - **Alternative CNIs** (Cilium, Calico): richer network policy, eBPF dataplane, overlay options to conserve VPC IPs. Trade-off: more to operate; you leave the "it just works with SGs" path.
 - **Service CIDR:** a **virtual** IP range for `ClusterIP` Services (e.g. `10.100.0.0/16`), **separate from the VPC CIDR** and **immutable after creation.** CoreDNS typically sits at `.10` of this range.
 
-> 🕳️ **Pitfall:** picking a Service CIDR that **overlaps** with your VPC or a peered network → routing chaos you can't fix without recreating the cluster. Choose a non-overlapping range up front.
+> **Pitfall:** picking a Service CIDR that **overlaps** with your VPC or a peered network → routing chaos you can't fix without recreating the cluster. Choose a non-overlapping range up front.
 
 ```
 VPC CIDR         10.0.0.0/16    ← real IPs: nodes + pods (VPC CNI)
@@ -148,7 +148,7 @@ flowchart LR
 - **Authentication = AWS IAM.** EKS maps IAM identities to Kubernetes users/groups. Historically via the **`aws-auth` ConfigMap**; the **modern way is EKS Access Entries / Access Policies** (2024+) - an API instead of hand-editing a fragile ConfigMap.
 - **Authorization = Kubernetes RBAC.** Once you're mapped to a group, standard `Role`/`RoleBinding` decide what you can do (see [Day 17 - RBAC](../../day17-rbac-security/notes.md) and the Secrets-RBAC section in [Day 10](../../day10-configmaps-secrets/notes.md)).
 
-> 🕳️ **The #1 EKS lockout:** corrupting the `aws-auth` ConfigMap so **no IAM identity maps to `system:masters`** → nobody can administer the cluster. The creator identity keeps admin access, and **Access Entries** largely eliminate this footgun. Prefer them on new clusters.
+> **The #1 EKS lockout:** corrupting the `aws-auth` ConfigMap so **no IAM identity maps to `system:masters`** → nobody can administer the cluster. The creator identity keeps admin access, and **Access Entries** largely eliminate this footgun. Prefer them on new clusters.
 
 **Least privilege in practice:** dedicated IRSA role per app · no wildcard `iam:*` on node roles · `system:masters` for as few humans as possible · audit with `kubectl auth can-i --list`.
 
@@ -158,9 +158,9 @@ flowchart LR
 
 | Mode | Security | Operational ease | When |
 |------|----------|------------------|------|
-| **Public** | ❌ Weakest (internet-facing API) | ✅ Easiest | Demos only |
-| **Public + Private (CIDR-locked)** | ✅ Good | ✅ Easy | **Most production** |
-| **Private only** | ✅✅ Strongest | ❌ Needs VPN/bastion/CI-in-VPC | Regulated / high-security |
+| **Public** | Weakest (internet-facing API) | Easiest | Demos only |
+| **Public + Private (CIDR-locked)** | Good | Easy | **Most production** |
+| **Private only** | Strongest | Needs VPN/bastion/CI-in-VPC | Regulated / high-security |
 
 **The real-world trade-off:** private-only is the security ideal, but it means **your CI/CD runner and your engineers must reach the API from inside the VPC** (VPN, bastion, or self-hosted runners in-VPC). Many teams land on **public+private with `publicAccessCidrs` locked to office/VPN ranges** - 90% of the security benefit, a fraction of the friction.
 
@@ -177,7 +177,7 @@ flowchart LR
 
 > **Analogy:** EBS is a **USB drive** - plug it into one laptop at a time, and it lives in one building (AZ). EFS is a **shared network drive** - everyone mounts it at once, from any building.
 
-> 🕳️ **Pitfall - the StatefulSet that won't reschedule:** an EBS volume in `us-east-1a` **cannot** attach to a pod that gets scheduled in `us-east-1b`. Use topology-aware scheduling (the EBS CSI driver sets this) or your DB pod gets stuck `Pending` after a node failure in the wrong AZ. Both drivers should be installed as **EKS add-ons with IRSA**.
+> **Pitfall - the StatefulSet that won't reschedule:** an EBS volume in `us-east-1a` **cannot** attach to a pod that gets scheduled in `us-east-1b`. Use topology-aware scheduling (the EBS CSI driver sets this) or your DB pod gets stuck `Pending` after a node failure in the wrong AZ. Both drivers should be installed as **EKS add-ons with IRSA**.
 
 ---
 

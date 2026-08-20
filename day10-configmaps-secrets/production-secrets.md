@@ -1,4 +1,4 @@
-# Day 10 (Deep Dive) — Production-Grade Secrets & Config Management
+# Day 10 (Deep Dive) - Production-Grade Secrets & Config Management
 
 > **Companion to [Day 10 - ConfigMaps & Secrets](notes.md).**
 > The base notes teach you *what* a Secret is. This file teaches you how **real teams handle secrets in production** - where "base64 in a YAML" is never the answer.
@@ -36,7 +36,7 @@ The production goal: **the real secret lives in a dedicated vault, and Kubernete
 
 ---
 
-## 2. Layer 1 — Encryption at Rest (do this on every real cluster)
+## 2. Layer 1 - Encryption at Rest (do this on every real cluster)
 
 By default, whatever is in a Secret sits in **etcd** essentially in the clear (just base64). Anyone who can read an etcd backup can read every password. **Encryption-at-rest** fixes that: the API server encrypts Secret data *before* writing to etcd.
 
@@ -65,9 +65,9 @@ resources:
       - identity: {}                # fallback for reads of not-yet-encrypted data
 ```
 
-> ☁️ **On managed clusters this is often a checkbox.** On **EKS** you enable "Secrets encryption" with a KMS key at (or after) cluster creation. **GKE** has "Application-layer secrets encryption"; **AKS** has KMS etcd encryption. Turn it on - it's nearly free and closes the etcd-backup hole.
+> **On managed clusters this is often a checkbox.** On **EKS** you enable "Secrets encryption" with a KMS key at (or after) cluster creation. **GKE** has "Application-layer secrets encryption"; **AKS** has KMS etcd encryption. Turn it on - it's nearly free and closes the etcd-backup hole.
 
-> 🔁 **Already have unencrypted Secrets?** After enabling, re-write them so they get encrypted:
+> **Already have unencrypted Secrets?** After enabling, re-write them so they get encrypted:
 > `kubectl get secrets -A -o json | kubectl replace -f -`
 
 **Encryption-at-rest is necessary but not sufficient** - the secret still originates in Git/YAML. That's what the next layer solves.
@@ -95,12 +95,12 @@ flowchart TB
     style GIT fill:#2a1a3a,stroke:#b48ead,color:#fff
 ```
 
-- **SYNC/MOUNT family** — the real secret lives in a cloud vault; Kubernetes pulls a copy on demand. Best when you already have (or want) a central secrets manager. **This is the dominant pattern in cloud/EKS shops.**
-- **ENCRYPT-IN-GIT family** — you want a pure GitOps flow where *everything* (including secrets, encrypted) lives in Git. Best for small teams / GitOps purists without a separate vault.
+- **SYNC/MOUNT family** - the real secret lives in a cloud vault; Kubernetes pulls a copy on demand. Best when you already have (or want) a central secrets manager. **This is the dominant pattern in cloud/EKS shops.**
+- **ENCRYPT-IN-GIT family** - you want a pure GitOps flow where *everything* (including secrets, encrypted) lives in Git. Best for small teams / GitOps purists without a separate vault.
 
 ---
 
-## 4. ⭐ Pattern A — External Secrets Operator (ESO)
+## 4. Pattern A - External Secrets Operator (ESO)
 
 **This is the pattern to learn first** - it's the de-facto standard for connecting Kubernetes to an external secrets manager.
 
@@ -142,7 +142,7 @@ helm install external-secrets external-secrets/external-secrets \
   -n external-secrets --create-namespace
 ```
 
-**Authenticate without static keys — use IRSA (IAM Roles for Service Accounts).** This is the modern, keyless way: the ServiceAccount is annotated with an IAM role, and AWS trusts the cluster's OIDC provider. **No AWS keys ever touch the cluster.**
+**Authenticate without static keys - use IRSA (IAM Roles for Service Accounts).** This is the modern, keyless way: the ServiceAccount is annotated with an IAM role, and AWS trusts the cluster's OIDC provider. **No AWS keys ever touch the cluster.**
 
 ```yaml
 # The ServiceAccount ESO will use, tied to an IAM role via IRSA
@@ -197,11 +197,11 @@ spec:
 
 Result: ESO creates and continuously refreshes a normal `db-secret` in `team-a`. **Your app doesn't change at all** - it still reads `db-secret` as an env var or mount. The magic is invisible to the workload.
 
-> ✅ **Why teams love ESO:** the real secret never enters Git; rotation in AWS propagates automatically on the next `refreshInterval`; works with AWS/GCP/Azure/Vault/1Password and dozens more providers through one consistent API.
+> **Why teams love ESO:** the real secret never enters Git; rotation in AWS propagates automatically on the next `refreshInterval`; works with AWS/GCP/Azure/Vault/1Password and dozens more providers through one consistent API.
 
 ---
 
-## 5. Pattern B — Secrets Store CSI Driver
+## 5. Pattern B - Secrets Store CSI Driver
 
 Instead of *creating a Secret object*, this **mounts the secret straight into the Pod as a file**, using the Container Storage Interface (the same plumbing as volumes).
 
@@ -209,7 +209,7 @@ Instead of *creating a Secret object*, this **mounts the secret straight into th
 > ESO restocks the fridge (a Secret object other things can read). The CSI driver installs a **private hatch** directly into *one* Pod - the value appears as a file at `/mnt/secrets/...` and disappears when the Pod stops. Nothing lands in a shared Secret object unless you explicitly ask it to.
 
 ```yaml
-# SecretProviderClass — "what to fetch and where from"
+# SecretProviderClass - "what to fetch and where from"
 apiVersion: secrets-store.csi.x-k8s.io/v1
 kind: SecretProviderClass
 metadata:
@@ -252,7 +252,7 @@ volumeMounts:
 
 ---
 
-## 6. Pattern C — Sealed Secrets (encrypt so you CAN commit to Git)
+## 6. Pattern C - Sealed Secrets (encrypt so you CAN commit to Git)
 
 From **Bitnami**. The one tool designed to let you **safely commit secrets to a public Git repo.**
 
@@ -275,19 +275,19 @@ kubectl create secret generic db-secret \
   --dry-run=client -o yaml \
 | kubeseal --controller-namespace kube-system -o yaml > sealed-db-secret.yaml
 
-git add sealed-db-secret.yaml   # ✅ safe: only YOUR cluster can decrypt it
+git add sealed-db-secret.yaml   #  safe: only YOUR cluster can decrypt it
 ```
 
 **Trade-off:** the source of truth is Git (not a central vault), and secrets are encrypted **per-cluster** (the encryption is scoped to that controller's key). Great for **GitOps with no separate vault**; less ideal when you need one secret shared/rotated across many clusters.
 
 ---
 
-## 7. Pattern D — SOPS + age/KMS (GitOps-native encryption)
+## 7. Pattern D - SOPS + age/KMS (GitOps-native encryption)
 
 **SOPS** (Mozilla) encrypts **only the values** in a YAML/JSON file, leaving keys readable, so diffs stay meaningful. It encrypts to an `age` key or a cloud KMS key. **Flux decrypts natively**; **Argo CD** does it via a plugin (e.g. KSOPS).
 
 ```yaml
-# db-secret.enc.yaml — committed to Git; values are ciphertext, keys stay readable
+# db-secret.enc.yaml - committed to Git; values are ciphertext, keys stay readable
 apiVersion: v1
 kind: Secret
 metadata:
@@ -308,7 +308,7 @@ sops --encrypt --age age1qz... db-secret.yaml > db-secret.enc.yaml   # before co
 
 ---
 
-## 8. Pattern E — HashiCorp Vault (when you need dynamic secrets)
+## 8. Pattern E - HashiCorp Vault (when you need dynamic secrets)
 
 Vault is a full secrets **platform**, not just storage. Its superpower is **dynamic secrets**: instead of a long-lived DB password, Vault **generates a fresh, short-lived credential per Pod** and auto-revokes it. That shrinks the blast radius of any leak to near zero.
 
@@ -321,7 +321,7 @@ Three ways to consume Vault from Kubernetes:
 | **Secrets Store CSI + Vault provider** | Mount Vault secrets as files via the CSI driver |
 
 ```yaml
-# Vault Agent Injector — pure annotations, no app code change
+# Vault Agent Injector - pure annotations, no app code change
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -342,15 +342,15 @@ The app just reads `/vault/secrets/db`. **Dynamic secret = a brand-new DB user p
 
 ---
 
-## 9. Decision Guide — Which One Should You Use?
+## 9. Decision Guide - Which One Should You Use?
 
 ```mermaid
 flowchart TD
     START{"Pick your secrets strategy"} --> Q1{"Do you already run / want<br/>a cloud secrets manager<br/>(AWS SM, Azure KV, GCP SM)?"}
     Q1 -->|Yes| Q2{"Need env vars & many<br/>consumers, or file-only<br/>into one Pod?"}
-    Q2 -->|"Env vars / shared"| ESO["⭐ External Secrets Operator"]
+    Q2 -->|"Env vars / shared"| ESO[" External Secrets Operator"]
     Q2 -->|"File-only, nothing at rest"| CSI["Secrets Store CSI Driver"]
-    Q1 -->|"No — pure GitOps"| Q3{"Want readable diffs &<br/>Flux/Argo integration?"}
+    Q1 -->|"No - pure GitOps"| Q3{"Want readable diffs &<br/>Flux/Argo integration?"}
     Q3 -->|Yes| SOPS["SOPS + age/KMS"]
     Q3 -->|"No, just seal & commit"| SEALED["Sealed Secrets"]
     START --> Q4{"Need dynamic, short-lived,<br/>per-Pod credentials + audit?"}
@@ -362,17 +362,17 @@ flowchart TD
 
 | Tool | Source of truth | Secret in Git? | Rotation | Best for |
 |------|-----------------|----------------|----------|----------|
-| **External Secrets Operator** | Cloud vault | ❌ never | ✅ auto (refreshInterval) | **Default choice** on EKS/AKS/GKE |
-| **Secrets Store CSI Driver** | Cloud vault / Vault | ❌ never | ✅ (with rotation reconciler) | "Nothing at rest", file mounts |
-| **Sealed Secrets** | Git (encrypted) | ✅ encrypted | Manual re-seal | Small teams, GitOps, no vault |
-| **SOPS + age/KMS** | Git (encrypted) | ✅ encrypted | Manual re-encrypt | Mature GitOps (Flux/Argo) |
-| **HashiCorp Vault** | Vault | ❌ never | ✅ + **dynamic** | Large orgs, dynamic creds, audit |
+| **External Secrets Operator** | Cloud vault | never | auto (refreshInterval) | **Default choice** on EKS/AKS/GKE |
+| **Secrets Store CSI Driver** | Cloud vault / Vault | never | (with rotation reconciler) | "Nothing at rest", file mounts |
+| **Sealed Secrets** | Git (encrypted) | encrypted | Manual re-seal | Small teams, GitOps, no vault |
+| **SOPS + age/KMS** | Git (encrypted) | encrypted | Manual re-encrypt | Mature GitOps (Flux/Argo) |
+| **HashiCorp Vault** | Vault | never | + **dynamic** | Large orgs, dynamic creds, audit |
 
-> 🎯 **If you're unsure and you're on a cloud provider: start with the External Secrets Operator.** It's the most widely adopted, has the gentlest learning curve, and doesn't force you to run Vault.
+> **If you're unsure and you're on a cloud provider: start with the External Secrets Operator.** It's the most widely adopted, has the gentlest learning curve, and doesn't force you to run Vault.
 
 ---
 
-## 10. Config Management — Modern Patterns (the ConfigMap side)
+## 10. Config Management - Modern Patterns (the ConfigMap side)
 
 Secrets get the spotlight, but **non-secret config** has its own best practices:
 
@@ -432,11 +432,11 @@ This is the shape of a mature setup: **no secret in Git, no static cloud keys, e
 
 A secret you can't rotate quickly is a liability. Rotation maturity, low to high:
 
-1. **Manual** — edit the Secret, `kubectl rollout restart`. Fine for tiny setups.
-2. **Manager-driven** — rotate in AWS SM/Vault; ESO's `refreshInterval` syncs it; Reloader restarts Pods. **The common production baseline.**
-3. **Dynamic (Vault)** — no rotation needed because each Pod gets a fresh short-lived credential that auto-expires. **The gold standard** for databases.
+1. **Manual** - edit the Secret, `kubectl rollout restart`. Fine for tiny setups.
+2. **Manager-driven** - rotate in AWS SM/Vault; ESO's `refreshInterval` syncs it; Reloader restarts Pods. **The common production baseline.**
+3. **Dynamic (Vault)** - no rotation needed because each Pod gets a fresh short-lived credential that auto-expires. **The gold standard** for databases.
 
-> 🔑 **Rule of thumb:** if a laptop is lost or an engineer leaves, how fast can you rotate every secret they saw? If the answer is "days," move up this list.
+> **Rule of thumb:** if a laptop is lost or an engineer leaves, how fast can you rotate every secret they saw? If the answer is "days," move up this list.
 
 ---
 
@@ -444,8 +444,8 @@ A secret you can't rotate quickly is a liability. Rotation maturity, low to high
 
 - [ ] **Encryption-at-rest enabled** (KMS provider) on every cluster
 - [ ] **No real secrets in Git** (only ExternalSecrets / SealedSecrets / SOPS-encrypted)
-- [ ] **No static cloud keys in cluster** — use IRSA / Workload Identity / K8s auth
-- [ ] **RBAC least-privilege** on `secrets`: `get` on named secrets, `list`/`watch` locked down ([base notes](notes.md#secrets--rbac--what-stricter-access-control-actually-means))
+- [ ] **No static cloud keys in cluster** - use IRSA / Workload Identity / K8s auth
+- [ ] **RBAC least-privilege** on `secrets`: `get` on named secrets, `list`/`watch` locked down ([base notes](notes.md#secrets--rbac---what-stricter-access-control-actually-means))
 - [ ] **One ServiceAccount per app**, not the shared `default`
 - [ ] **Rotation path exists** and is tested (not just documented)
 - [ ] **Audit logging on** for secret access
@@ -472,16 +472,16 @@ kubectl create secret generic demo-secret \
   --dry-run=client -o yaml \
 | kubeseal --controller-namespace kube-system -o yaml > sealed-demo.yaml
 
-# 4. Inspect it — the value is encrypted; this file is safe to commit
+# 4. Inspect it - the value is encrypted; this file is safe to commit
 cat sealed-demo.yaml
 
 # 5. Apply the SEALED version; the controller decrypts it into a real Secret
 kubectl apply -f sealed-demo.yaml
 kubectl get secret demo-secret -o jsonpath='{.data.API_KEY}' | base64 -d
-# -> super-secret-123   (the controller decrypted it for you)
+# -> super-secret-123 (the controller decrypted it for you)
 ```
 
-You just committed a secret to "Git" (the sealed file) that **only your cluster** can open. 🎉
+You just committed a secret to "Git" (the sealed file) that **only your cluster** can open. 
 
 **Stretch goal (if you have AWS):** install ESO, put a value in Secrets Manager, and sync it with an `ExternalSecret` using the Section 4 manifests.
 

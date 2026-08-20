@@ -40,7 +40,7 @@ flowchart TB
 | **IAM permissions** | You need rights to create EKS, EC2, IAM, VPC | see below |
 | **A VPC with subnets** | EKS *must* live in a VPC; nodes need subnets | we'll create/verify |
 
-> ⚠️ **Version-skew rule:** keep your `kubectl` **within one minor version** of the cluster. A 1.30 cluster works with kubectl 1.29-1.31, not 1.26.
+> **Version-skew rule:** keep your `kubectl` **within one minor version** of the cluster. A 1.30 cluster works with kubectl 1.29-1.31, not 1.26.
 
 ### The IAM permissions you actually need
 You (the human/CI principal) need to be able to create: `eks:*`, `ec2:*` (for VPC/ENI/SG), `iam:CreateRole`/`AttachRolePolicy`/`PassRole`, and `cloudformation:*` if using eksctl (it uses CloudFormation under the hood). For learning, an admin role is fine; for real orgs, scope this down.
@@ -76,7 +76,7 @@ aws iam attach-role-policy \
   --policy-arn arn:aws:iam::aws:policy/AmazonEKSClusterPolicy
 ```
 
-> 🕳️ **Common pitfall:** People attach `AmazonEKSClusterPolicy` to the **node** role by mistake, or forget the trust policy's `Service: eks.amazonaws.com`. Wrong trust principal = "cannot assume role" at create time.
+> **Common pitfall:** People attach `AmazonEKSClusterPolicy` to the **node** role by mistake, or forget the trust policy's `Service: eks.amazonaws.com`. Wrong trust principal = "cannot assume role" at create time.
 
 ---
 
@@ -120,7 +120,7 @@ kubernetes.io/role/internal-elb = 1
 kubernetes.io/cluster/<cluster-name> = shared
 ```
 
-> 🕳️ **The classic outage:** forgetting the `kubernetes.io/role/elb` tags → you create an Ingress/Service type LoadBalancer and **nothing happens**, because the AWS Load Balancer Controller can't find a subnet to place the LB in.
+> **The classic outage:** forgetting the `kubernetes.io/role/elb` tags → you create an Ingress/Service type LoadBalancer and **nothing happens**, because the AWS Load Balancer Controller can't find a subnet to place the LB in.
 
 ### Security Groups
 - **Cluster security group** (EKS creates one): allows control-plane ↔ node communication. Don't delete it.
@@ -148,7 +148,7 @@ eksctl create cluster \
   --with-oidc                        # ENABLE OIDC now → needed for IRSA later
 ```
 
-> 💡 **Always pass `--with-oidc`.** It sets up the OIDC identity provider that **IRSA** (pod-level IAM) depends on. Adding it later is a chore; enabling it upfront costs nothing.
+> **Always pass `--with-oidc`.** It sets up the OIDC identity provider that **IRSA** (pod-level IAM) depends on. Adding it later is a chore; enabling it upfront costs nothing.
 
 ### Path B - AWS CLI (shows the raw API; good for understanding)
 
@@ -169,7 +169,7 @@ publicAccessCidrs=<YOUR_OFFICE_IP>/32 \
 aws eks wait cluster-active --name demo-eks
 ```
 
-> ⏱️ **Control plane creation takes 10-15 minutes.** This is normal - AWS is provisioning a multi-AZ, HA Kubernetes control plane. Nodes come up faster.
+> **Control plane creation takes 10-15 minutes.** This is normal - AWS is provisioning a multi-AZ, HA Kubernetes control plane. Nodes come up faster.
 
 ---
 
@@ -191,7 +191,7 @@ aws eks update-cluster-config --name demo-eks \
 publicAccessCidrs=203.0.113.10/32
 ```
 
-> 🕳️ **Pitfall - locking yourself out:** if you set **private-only** but your CI/CD or your laptop isn't inside the VPC (no VPN/bastion), you'll get `Unable to connect to the server: dial tcp ... i/o timeout`. Plan your access path *before* going private-only.
+> **Pitfall - locking yourself out:** if you set **private-only** but your CI/CD or your laptop isn't inside the VPC (no VPN/bastion), you'll get `Unable to connect to the server: dial tcp ... i/o timeout`. Plan your access path *before* going private-only.
 
 ---
 
@@ -225,9 +225,9 @@ aws eks create-nodegroup \
 - `AmazonEKS_CNI_Policy` → "let the CNI attach pod IP addresses (ENIs)."
 - `AmazonEC2ContainerRegistryReadOnly` → "let it pull container images from ECR."
 
-> 🕳️ **Pitfall:** miss `AmazonEKS_CNI_Policy` and pods fail to get IPs → stuck `ContainerCreating`. Miss the ECR policy → `ImagePullBackOff` on private images.
+> **Pitfall:** miss `AmazonEKS_CNI_Policy` and pods fail to get IPs → stuck `ContainerCreating`. Miss the ECR policy → `ImagePullBackOff` on private images.
 
-> 💡 **Managed vs self-managed** (covered deeply in [02-eks-config-explanation.md](02-eks-config-explanation.md)): use **managed node groups** unless you have a specific reason not to - AWS handles AMI patching, graceful draining on scale-down, and rolling updates.
+> **Managed vs self-managed** (covered deeply in [02-eks-config-explanation.md](02-eks-config-explanation.md)): use **managed node groups** unless you have a specific reason not to - AWS handles AMI patching, graceful draining on scale-down, and rolling updates.
 
 ---
 
@@ -251,9 +251,9 @@ aws eks create-addon --cluster-name demo-eks --addon-name kube-proxy
 aws eks describe-addon-versions --addon-name vpc-cni --kubernetes-version 1.30
 ```
 
-> 💡 **Modern best practice:** run **VPC CNI with IRSA** (give the `aws-node` service account its own IAM role) instead of relying on the node role - least privilege for the component that manages networking. The Terraform module wires this for you.
+> **Modern best practice:** run **VPC CNI with IRSA** (give the `aws-node` service account its own IAM role) instead of relying on the node role - least privilege for the component that manages networking. The Terraform module wires this for you.
 
-> 🕳️ **Pitfall:** upgrading the cluster version but leaving add-ons on old versions → subtle DNS/networking breakage. Keep add-ons in step with the control plane.
+> **Pitfall:** upgrading the cluster version but leaving add-ons on old versions → subtle DNS/networking breakage. Keep add-ons in step with the control plane.
 
 ---
 
@@ -273,7 +273,7 @@ aws eks update-cluster-config --name demo-eks \
 - **authenticator** → IAM→K8s auth failures (the #1 "why can't I connect" log).
 - **controllerManager** / **scheduler** → why pods aren't scheduling / controllers misbehaving.
 
-> ⚠️ **Cost note:** control-plane logs (especially `audit`) can be **voluminous and pricey** in CloudWatch. Enable what you need, set **log-group retention** (e.g. 30-90 days), and ship to cheaper storage if you must keep them long-term.
+> **Cost note:** control-plane logs (especially `audit`) can be **voluminous and pricey** in CloudWatch. Enable what you need, set **log-group retention** (e.g. 30-90 days), and ship to cheaper storage if you must keep them long-term.
 
 Node/pod-level observability (Prometheus, Grafana, CloudWatch Container Insights) is covered in [03-eks-best-practices.md](03-eks-best-practices.md).
 

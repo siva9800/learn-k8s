@@ -293,6 +293,8 @@ kubectl cluster-info
 
 Expected: two `Ready` nodes, and the three add-on pods `Running`. If nodes are `NotReady`, it's almost always **CNI (no pod IPs)** or the **node role missing a policy** - check `kubectl describe node` and the `aws-node` pod logs.
 
+> This is the quick version. For the full connect reference - how EKS auth works under the hood, giving teammates/CI access, reaching a private cluster, and every connection error with its fix - see [05 - Connecting to the Cluster](05-connecting-to-the-cluster.md).
+
 ---
 
 ## End-to-End Recap

@@ -89,6 +89,8 @@ aws eks update-kubeconfig --region ap-south-1 --name demo-eks
 
 This writes/merges cluster credentials into `~/.kube/config`. Auth uses your **AWS identity** (the applier was granted admin via `enable_cluster_creator_admin_permissions`).
 
+> For the full connect story - how EKS auth works, granting teammates/CI access, reaching a private cluster, and troubleshooting every "why can't I connect" error - see [05 - Connecting to the Cluster](../05-connecting-to-the-cluster.md).
+
 ---
 
 ## Step 4 - Verify

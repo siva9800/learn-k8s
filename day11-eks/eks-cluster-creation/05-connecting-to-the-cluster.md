@@ -157,6 +157,8 @@ So a person with full EKS/IAM access can manage the cluster from the AWS side, b
 
 > **Important caveat:** `eks:*` includes `eks:CreateAccessEntry` and `eks:AssociateAccessPolicy`, so on an EKS-API-auth cluster that person can **grant themselves cluster-admin in one command** and then connect. So "EKS full access" is effectively the power to *become* cluster-admin - not automatic, but one step away. Scope IAM tightly. (On a **ConfigMap-only** cluster, self-granting via access entries does not apply - they would need `kubectl` to edit `aws-auth`.)
 
+> **Going deeper on the RBAC side:** how IAM identities map to Kubernetes users/groups, how EKS access policies mirror the built-in `view`/`edit`/`admin` ClusterRoles, and how this differs from IRSA - see [Day 17 - How RBAC Works on Amazon EKS](../../day17-rbac-security/rbac-on-eks.md).
+
 There are two mechanisms - use **Access Entries** (modern) unless you're on a legacy cluster.
 
 ### Modern way: EKS Access Entries (recommended)

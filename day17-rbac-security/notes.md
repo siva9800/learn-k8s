@@ -2,6 +2,8 @@
 
 > **Goal:** Control exactly *who* (and *what*) can do *which* actions on *which* resources in your cluster - using RBAC and the security layers around it - so a mistake or a stolen token cannot wreck everything.
 
+> **On EKS?** RBAC itself is identical everywhere, but EKS adds an **AWS IAM -> Kubernetes identity** layer in front of it (Access Entries, access policies, IRSA). Once you have the basics below, see the companion: **[How RBAC Works on Amazon EKS](rbac-on-eks.md)**.
+
 ---
 
 ## Learning Objectives

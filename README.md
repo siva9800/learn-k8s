@@ -64,7 +64,7 @@ flowchart LR
 | [Day 14](day14-statefulsets/notes.md) | **StatefulSets** | Theory | Running stateful apps like databases |
 | [Day 15](day15-statefulsets-demo/notes.md) | **StatefulSets Demo** | Hands-On | Ordered creation, stable identity; [EKS demo](day15-statefulsets-demo/eks-demo.md) |
 | [Day 16](day16-resource-management-autoscaling/notes.md) | **Resource Management & Autoscaling** | Theory + Lab | Requests/limits, QoS, HPA, VPA, Cluster Autoscaler |
-| [Day 17](day17-rbac-security/notes.md) | **RBAC & Cluster Security** | Theory + Lab | Roles, RoleBindings, ServiceAccounts, least privilege |
+| [Day 17](day17-rbac-security/notes.md) | **RBAC & Cluster Security** | Theory + Lab | Roles, RoleBindings, ServiceAccounts, least privilege; [RBAC on EKS](day17-rbac-security/rbac-on-eks.md) (IAM bridge, access entries/policies) |
 | [Day 18](day18-ingress-demo/notes.md) | **Ingress** | Hands-On | HTTP routing, host/path rules, TLS; [EKS demo](day18-ingress-demo/eks-demo.md) |
 | [Day 19](day19-daemonsets-jobs-cronjobs/notes.md) | **DaemonSets, Jobs & CronJobs** | Theory + Lab | One-pod-per-node, batch & scheduled tasks |
 | [Day 20](day20-network-policies/notes.md) | **Network Policies** | Theory + Lab | Pod-to-pod firewalls, default-deny, CNI requirement |

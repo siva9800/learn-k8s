@@ -144,6 +144,19 @@ Expected on success: `cluster-info` shows the API URL, nodes are `Ready`, and `k
 
 **The most common surprise:** *you* can connect (you created the cluster and, by default, got admin), but a teammate or a CI role gets **Unauthorized**. That's because **creating a cluster grants access only to the creator** - and even that is optional (see [What if the creator was NOT granted admin?](#what-if-the-creator-was-not-granted-admin)). Everyone else must be added.
 
+### IAM access is not Kubernetes access
+
+Before the how, the concept that trips up almost everyone: **EKS has two separate permission systems, and IAM alone does not let you run `kubectl`.**
+
+| System | Governs | Example actions | Granted by |
+|--------|---------|-----------------|------------|
+| **IAM** (e.g. `eks:*`, "EKS full access") | the **AWS API** for the cluster *resource* | create/delete cluster, scale node groups, manage add-ons, **create access entries** | IAM policies |
+| **Kubernetes RBAC** | the **Kubernetes API** (`kubectl`) | `get pods`, `get nodes`, read secrets, deploy | an **Access Entry** or `aws-auth` mapping |
+
+So a person with full EKS/IAM access can manage the cluster from the AWS side, but with **no access entry** `kubectl get nodes` still returns `error: You must be logged in to the server (Unauthorized)`. The same block appears in the console's Resources/Compute tab ("your current user or role does not have access to Kubernetes objects on this cluster").
+
+> **Important caveat:** `eks:*` includes `eks:CreateAccessEntry` and `eks:AssociateAccessPolicy`, so on an EKS-API-auth cluster that person can **grant themselves cluster-admin in one command** and then connect. So "EKS full access" is effectively the power to *become* cluster-admin - not automatic, but one step away. Scope IAM tightly. (On a **ConfigMap-only** cluster, self-granting via access entries does not apply - they would need `kubectl` to edit `aws-auth`.)
+
 There are two mechanisms - use **Access Entries** (modern) unless you're on a legacy cluster.
 
 ### Modern way: EKS Access Entries (recommended)
@@ -161,6 +174,40 @@ aws eks associate-access-policy \
   --policy-arn arn:aws:eks::aws:cluster-access-policy/AmazonEKSViewPolicy \
   --access-scope type=cluster
 ```
+
+**The CLI user running these commands needs IAM permission to manage access entries.** These are `eks:*` API calls governed by IAM (see [IAM access is not Kubernetes access](#iam-access-is-not-kubernetes-access)) - so attach a policy like this to whoever performs the grant (an admin/platform role, or a bootstrap CI role):
+
+```json
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "EKSAccessEntryManagement",
+            "Effect": "Allow",
+            "Action": [
+                "eks:CreateAccessEntry",
+                "eks:AssociateAccessPolicy",
+                "eks:DescribeCluster",
+                "eks:ListAccessEntries",
+                "eks:DescribeAccessEntry"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+```
+
+What each action is for:
+
+| Action | Why it's needed |
+|--------|-----------------|
+| `eks:CreateAccessEntry` | Register the IAM principal on the cluster (step 1) |
+| `eks:AssociateAccessPolicy` | Attach an access policy / scope to it (step 2) |
+| `eks:DescribeCluster` | Read cluster details (also needed by `update-kubeconfig`) |
+| `eks:ListAccessEntries` | See existing entries (avoid duplicates, audit who has access) |
+| `eks:DescribeAccessEntry` | Inspect a specific entry's policies and scope |
+
+> **Least-privilege tip:** `Resource: "*"` here lets the user manage access entries on **any** cluster in the account. To restrict it, replace `"*"` with the specific cluster ARN(s), e.g. `"arn:aws:eks:ap-south-1:111122223333:cluster/my-cluster"`. Grant this only to the small set of admins/roles that provision access - it is effectively the power to make anyone cluster-admin.
 
 Common AWS-managed access policies:
 

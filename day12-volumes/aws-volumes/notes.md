@@ -830,6 +830,49 @@ Pod deleted → Deployment creates new pod → Scheduler checks:
        (This is why multi-AZ node groups are important)
 ```
 
+#### How the Scheduler Enforces This (Volume Node Affinity)
+
+The flow above raises the real question: *how* does Kubernetes make sure the recreated pod lands in the volume's AZ in the first place? The answer is **Volume Node Affinity** plus the scheduler's **VolumeBinding plugin** - and understanding it explains almost every "pod stuck Pending because of storage" failure.
+
+**1. The volume records its AZ on the PV.** When an EBS volume is provisioned, its PV automatically gets a `nodeAffinity` (this is what "volume node affinity" means):
+
+```yaml
+spec:
+  nodeAffinity:
+    required:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: topology.ebs.csi.aws.com/zone   # nodes also carry the well-known topology.kubernetes.io/zone
+          operator: In
+          values: ["ap-south-1a"]              # the AZ the volume physically lives in
+```
+
+**2. The scheduler FILTERS nodes - it does not try-and-fail.** When placing the pod, the VolumeBinding plugin reads the PV's topology and removes every node that cannot attach the volume *before* choosing one:
+
+```mermaid
+flowchart LR
+    POD["New pod<br/>needs PVC (bound to EBS PV in 1a)"] --> FILTER{"Scheduler filter phase<br/>VolumeBinding plugin"}
+    FILTER --> N1["Node-A (1a) KEEP"]
+    FILTER --> N2["Node-B (1b) DROP"]
+    FILTER --> N3["Node-C (1c) DROP"]
+    N1 --> SCORE["Score and pick among survivors"] --> PLACE["Pod placed on Node-A"]
+```
+
+Only nodes in `ap-south-1a` survive the filter, so the pod is *guaranteed* to land where the volume can attach. This is called **topology-aware scheduling** - a filter, not a "try a node, fail, retry" loop.
+
+**3. If no node survives the filter, the pod stays `Pending`.** The scheduler will not place a pod on a node it already knows cannot attach the volume. No node in `ap-south-1a` = Pending (again, why multi-AZ node groups matter).
+
+**The mental model to keep:**
+
+```
+Volume is fixed to its AZ  ->  the POD follows the volume
+NOT:  the volume follows the pod
+```
+
+**Where WaitForFirstConsumer fits (and where it does not).** `WaitForFirstConsumer` only affects the **first** placement: it delays *creating* the volume until a pod is scheduled, so the volume is born in that pod's AZ. Once the volume exists, it is the PV's **node affinity** - not the binding mode - that pins every future reschedule to the correct AZ. So `WaitForFirstConsumer` prevents the "volume created in the wrong AZ" problem; it does nothing for re-attachment, because by then the AZ is already decided.
+
+> **One-liner:** Kubernetes keeps a pod in its volume's AZ by putting **volume node affinity** (a topology constraint) on the PersistentVolume; the scheduler's **VolumeBinding plugin filters out every node that cannot attach the volume**, so the pod is only ever placed on a node in the volume's zone - or left `Pending` if none exists.
+
 ---
 
 ### Dynamic Provisioning Clean Up

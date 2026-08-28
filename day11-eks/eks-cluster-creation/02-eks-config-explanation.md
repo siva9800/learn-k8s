@@ -115,6 +115,58 @@ metadata:
 
 > **Newer alternative - EKS Pod Identity** (2024+): a simpler association API that doesn't require managing OIDC trust policies per role. IRSA is still everywhere and portable; Pod Identity is easier to operate on EKS specifically. For new EKS-only clusters, evaluate Pod Identity; IRSA remains the safe, widely-documented default.
 
+### IRSA vs EKS Pod Identity (know this difference)
+
+Both give a **pod its own IAM role** instead of the shared node role - they just wire the trust two different ways. This is a very common interview and design question, and it also decides how your **EKS add-ons** (EBS/EFS CSI, VPC CNI, etc.) get their AWS permissions.
+
+**IRSA (IAM Roles for Service Accounts)** - the original (2019). It federates through an **IAM OIDC identity provider**:
+
+- Each cluster exposes an OIDC issuer URL; you register it once as an **IAM OIDC identity provider** (one per cluster).
+- The IAM role's **trust policy** references *that specific provider* and the ServiceAccount (`system:serviceaccount:ns:sa`).
+- The ServiceAccount is annotated with `eks.amazonaws.com/role-arn`.
+- The pod gets a projected OIDC token and calls `AssumeRoleWithWebIdentity`.
+
+**EKS Pod Identity** - the newer way (2023). **No OIDC provider at all:**
+
+- You install the **EKS Pod Identity Agent** add-on (a DaemonSet on the nodes).
+- You create an **association** (`aws eks create-pod-identity-association`) linking a namespace + ServiceAccount to an IAM role - an EKS API call, kept *separate* from the role.
+- The role's trust policy just trusts the generic `pods.eks.amazonaws.com` principal - no cluster-specific OIDC - so the **same role can be reused across many clusters**.
+- No ServiceAccount annotation needed.
+
+```mermaid
+flowchart TB
+    subgraph I["IRSA - per-cluster OIDC federation"]
+      SA1["SA (annotated with role-arn)"] --> TOK["projected OIDC token"]
+      TOK --> OIDC["IAM OIDC provider<br/>(one per cluster)"] --> R1["IAM role<br/>trust = this cluster's OIDC + SA"]
+    end
+    subgraph P["Pod Identity - agent + association"]
+      SA2["SA (no annotation)"] --> AG["Pod Identity Agent"]
+      AG --> ASSOC["association<br/>(ns + SA -> role)"] --> R2["IAM role<br/>trust = pods.eks.amazonaws.com (generic)"]
+    end
+    style OIDC fill:#0a1a3a,stroke:#5b8def,color:#fff
+    style ASSOC fill:#0d2818,stroke:#3fb950,color:#fff
+```
+
+| Aspect | IRSA | EKS Pod Identity |
+|--------|------|------------------|
+| **Introduced** | 2019 (mature, everywhere) | 2023 (newer, simpler ops) |
+| **Needs an OIDC provider?** | **Yes** - one IAM OIDC identity provider per cluster | **No** - uses the Pod Identity Agent add-on |
+| **Role trust policy** | References *this cluster's* OIDC provider + SA | Generic `pods.eks.amazonaws.com` |
+| **Reuse one role across many clusters** | Painful (add each cluster's OIDC to the trust policy) | **Easy** (same role, one association per cluster) |
+| **SA annotation** | Required (`eks.amazonaws.com/role-arn`) | Not needed (the association maps it) |
+| **Where it works** | EKS **and** any OIDC-federated K8s (portable) | **EKS only** |
+| **Fargate pods** | **Supported** | **Not supported** (agent is a DaemonSet; EC2 nodes only) |
+| **How the pod gets creds** | OIDC token -> `AssumeRoleWithWebIdentity` | Agent -> role via the association |
+| **Best for** | Fargate, portable/multi-cloud, tools that only document IRSA | New EKS-only clusters, many clusters/roles, least setup |
+
+> **On "identity provider":** IRSA *is* the identity-provider path - EKS registers the cluster's OIDC issuer as an **IAM OIDC identity provider**, and IAM federates the pod's token through it. **Pod Identity removes that identity-provider machinery entirely** and uses a direct EKS-managed association instead. So "IRSA = OIDC identity provider; Pod Identity = no identity provider, just an association."
+
+> **Analogy:** IRSA is every robot carrying a **passport** (OIDC token) that a border agent (the per-cluster IAM OIDC provider) verifies. Pod Identity is a **building keycard system** (the Pod Identity Agent) where you just add the robot to an **access list** (the association) - no passports, no per-cluster border post.
+
+**For EKS add-ons:** managed add-ons that need AWS permissions (EBS/EFS CSI driver, VPC CNI, CloudWatch) can get their IAM role **either way** - attach a role ARN via **IRSA** (what the Terraform in [04](04-eks-terraform-setup/README.md) does for the EBS CSI driver) or create a **Pod Identity association** for the add-on's ServiceAccount. New clusters increasingly prefer Pod Identity for this.
+
+> **One-liner:** IRSA federates a pod's ServiceAccount token through a **per-cluster IAM OIDC identity provider**; **EKS Pod Identity** replaces that with an **agent plus a namespace/ServiceAccount-to-role association**, giving reusable roles and far less setup - at the cost of being **EKS-only and not supporting Fargate**.
+
 ---
 
 ## 5. Networking - CNI, IP ranges, Service CIDR

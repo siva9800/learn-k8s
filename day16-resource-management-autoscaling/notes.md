@@ -2,6 +2,8 @@
 
 > **Goal:** Learn how to tell Kubernetes how much CPU and memory each app needs, what happens when an app asks for too much, and how the cluster can grow and shrink **by itself** - more pods, bigger pods, or more nodes.
 
+> **Related deep dive:** requests/limits decide *whether* a node fits a pod; for *which* node a pod lands on - dedicated nodes, spreading replicas across zones for HA, keeping pods together/apart - see **[Pod Scheduling: Affinity, Taints, and Topology Spread](scheduling.md)**.
+
 ## Learning Objectives
 
 By the end of this lesson you will be able to:

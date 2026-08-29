@@ -2,6 +2,8 @@
 
 > **Goal:** Understand how a Deployment manages ReplicaSets to roll out new versions with zero downtime and roll back safely when something breaks.
 
+> **Related deep dive:** to protect availability during node drains and cluster upgrades (not just rollouts), see [Pod Disruption Budgets](pod-disruption-budgets.md).
+
 ---
 
 ## Learning Objectives

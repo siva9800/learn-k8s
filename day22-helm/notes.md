@@ -2,6 +2,8 @@
 
 > **Goal:** Understand Helm as the **package manager for Kubernetes** - and learn how charts, values, and releases let you install, upgrade, and roll back whole applications with one command.
 
+> **Related deep dive:** Helm often installs **operators** (CRDs + a controller). To understand how Kubernetes is *extended* with custom resources, see [Custom Resources, CRDs, and Operators](crds-and-operators.md).
+
 ## Learning Objectives
 
 By the end of this lesson you will be able to:

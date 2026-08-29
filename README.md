@@ -51,9 +51,9 @@ flowchart LR
 | [Day 01](day01-why-kubernetes/notes.md) | **Why Kubernetes?** | Theory | Problems with manual deployment; why containers alone aren't enough |
 | [Day 02](day02-architecture/notes.md) | **Architecture** | Theory | Control plane, worker nodes, all internal components |
 | [Day 03](day03-setup/notes.md) | **Setup** | Setup | Install Minikube, kubectl, run your first cluster |
-| [Day 04](day04-pods/notes.md) | **Pods** | Theory + Lab | The smallest unit in K8s; create & manage Pods |
+| [Day 04](day04-pods/notes.md) | **Pods** | Theory + Lab | The smallest unit in K8s; create & manage Pods; [init & sidecar containers](day04-pods/init-and-sidecar-containers.md) |
 | [Day 05](day05-replicasets/notes.md) | **ReplicaSets** | Theory + Lab | Running multiple copies; self-healing |
-| [Day 06](day06-deployments/notes.md) | **Deployments** | Theory + Lab | Rolling updates, rollbacks, zero-downtime |
+| [Day 06](day06-deployments/notes.md) | **Deployments** | Theory + Lab | Rolling updates, rollbacks, zero-downtime; [Pod Disruption Budgets](day06-deployments/pod-disruption-budgets.md) |
 | [Day 07](day07-services/notes.md) | **Services & Networking** | Theory | ClusterIP, NodePort, LoadBalancer, Headless |
 | [Day 08](day08-services-demo/notes.md) | **Services Demo** | Hands-On | All service types, DNS discovery, load balancing |
 | [Day 09](day09-namespaces/notes.md) | **Namespaces** | Theory + Lab | Organizing & isolating resources |
@@ -68,8 +68,8 @@ flowchart LR
 | [Day 18](day18-ingress-demo/notes.md) | **Ingress** | Hands-On | HTTP routing, host/path rules, TLS; [EKS demo](day18-ingress-demo/eks-demo.md) |
 | [Day 19](day19-daemonsets-jobs-cronjobs/notes.md) | **DaemonSets, Jobs & CronJobs** | Theory + Lab | One-pod-per-node, batch & scheduled tasks |
 | [Day 20](day20-network-policies/notes.md) | **Network Policies** | Theory + Lab | Pod-to-pod firewalls, default-deny, CNI requirement |
-| [Day 21](day21-monitoring-logging/notes.md) | **Monitoring & Logging** | Theory + Lab | Prometheus, Grafana, alerting, log aggregation, probes; [probes deep dive](day21-monitoring-logging/probes.md) (liveness/readiness/startup, tuning, debugging) |
-| [Day 22](day22-helm/notes.md) | **Helm** | Theory + Lab | Package manager for K8s; [demo](day22-helm/demo.md) |
+| [Day 21](day21-monitoring-logging/notes.md) | **Monitoring & Logging** | Theory + Lab | Prometheus, Grafana, alerting, log aggregation, probes; [probes deep dive](day21-monitoring-logging/probes.md) (liveness/readiness/startup); [debugging pods](day21-monitoring-logging/debugging-pods.md) (kubectl debug, ephemeral containers) |
+| [Day 22](day22-helm/notes.md) | **Helm** | Theory + Lab | Package manager for K8s; [demo](day22-helm/demo.md); [CRDs & Operators](day22-helm/crds-and-operators.md) |
 
 ---
 

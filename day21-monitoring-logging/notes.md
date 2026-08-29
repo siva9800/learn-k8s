@@ -242,7 +242,7 @@ helm install loki grafana/loki-stack \
 
 ## Health Probes Recap (and How They Relate)
 
-> **Want the full, hands-on version?** This is a recap. For every tuning field, the boot/timeout math, health-endpoint design, rolling-update and graceful-shutdown interaction, and probe debugging, see the deep dive: **[Health Probes in Practice](probes.md)**.
+> **Want the full, hands-on version?** This is a recap. For every tuning field, the boot/timeout math, health-endpoint design, rolling-update and graceful-shutdown interaction, and probe debugging, see the deep dive: **[Health Probes in Practice](probes.md)**. And to get *inside* a running or crashing pod (even a distroless one), see **[Debugging Pods with kubectl debug](debugging-pods.md)**.
 
 Monitoring tells *you* about problems. **Probes** let Kubernetes *act on them automatically*. A probe is a periodic health check Kubernetes runs against your container. There are three kinds, and mixing them up is a classic mistake.
 

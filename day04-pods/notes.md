@@ -2,6 +2,8 @@
 
 > **Goal:** Understand what a Pod is, why it is the smallest deployable unit in Kubernetes, and how to create, inspect, and delete one.
 
+> **Related deep dive:** a Pod can hold more than one container. For **init containers** (ordered setup before your app starts) and **sidecar containers** (helpers that run alongside it), see [Init and Sidecar Containers](init-and-sidecar-containers.md).
+
 ---
 
 ## Learning Objectives

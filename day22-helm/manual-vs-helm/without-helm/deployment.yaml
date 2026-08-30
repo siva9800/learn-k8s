@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: webapp
+  labels:
+    app: webapp
+spec:
+  replicas: 2                       # hardcoded - change means editing this file
+  selector:
+    matchLabels:
+      app: webapp
+  template:
+    metadata:
+      labels:
+        app: webapp
+    spec:
+      containers:
+      - name: webapp
+        image: nginx:1.27           # hardcoded image/tag
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html
+          mountPath: /usr/share/nginx/html
+        readinessProbe:             # only serve traffic once nginx answers
+          httpGet:
+            path: /
+            port: 80
+          periodSeconds: 5
+        livenessProbe:              # restart if nginx stops answering
+          httpGet:
+            path: /
+            port: 80
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 50m
+            memory: 64Mi
+          limits:
+            cpu: 200m
+            memory: 128Mi
+      volumes:
+      - name: html
+        configMap:
+          name: webapp-html

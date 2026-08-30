@@ -1,0 +1,6 @@
+apiVersion: v2
+name: webapp
+description: The same nginx web app as ../without-helm, packaged as a Helm chart
+type: application
+version: 0.1.0          # chart version
+appVersion: "1.27"      # app (nginx) version

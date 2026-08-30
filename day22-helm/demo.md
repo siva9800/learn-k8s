@@ -4,6 +4,8 @@
 
 > **Pre-requisite:** [Day 22 - Helm Theory](notes.md)
 
+> **New to *why* Helm?** First see [Deploying an App: Without Helm vs With Helm](manual-vs-helm/README.md) - the same app deployed with raw `kubectl` and then as a chart, side by side.
+
 ## Learning Objectives
 
 By the end of this demo you will be able to:

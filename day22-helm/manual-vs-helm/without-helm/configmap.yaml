@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webapp-html
+  labels:
+    app: webapp
+data:
+  # The page nginx serves. To change the message you must edit THIS file by hand.
+  index.html: |
+    <!doctype html>
+    <html>
+    <head><title>webapp</title></head>
+    <body style="font-family:sans-serif;text-align:center;margin-top:5rem">
+      <h1>Deployed WITHOUT Helm</h1>
+      <p>Raw kubectl manifests - to change anything, edit the YAML.</p>
+      <p>Environment: <b>dev</b> &nbsp;|&nbsp; Replicas: <b>2</b></p>
+    </body>
+    </html>

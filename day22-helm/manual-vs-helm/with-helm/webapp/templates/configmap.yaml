@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "webapp.fullname" . }}-html
+  labels:
+    {{- include "webapp.labels" . | nindent 4 }}
+data:
+  # The same HTML page, but the values are FILLED IN from values.yaml at install time.
+  index.html: |
+    <!doctype html>
+    <html>
+    <head><title>{{ include "webapp.fullname" . }}</title></head>
+    <body style="font-family:sans-serif;text-align:center;margin-top:5rem">
+      <h1>{{ .Values.message }}</h1>
+      <p>One chart, driven by values - no template edits to change this.</p>
+      <p>Environment: <b>{{ .Values.env }}</b> &nbsp;|&nbsp; Replicas: <b>{{ .Values.replicaCount }}</b></p>
+      <p>Release: <b>{{ .Release.Name }}</b> &nbsp;|&nbsp; Chart: {{ .Chart.Name }}-{{ .Chart.Version }} (nginx {{ .Chart.AppVersion }})</p>
+    </body>
+    </html>

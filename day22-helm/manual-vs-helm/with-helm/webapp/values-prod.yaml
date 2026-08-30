@@ -1,0 +1,5 @@
+# The ONLY difference for prod - one small file, not a whole copied folder.
+# Use with:  helm install webapp-prod ./webapp -f ./webapp/values-prod.yaml
+env: prod
+replicaCount: 5
+message: "Deployed WITH Helm (PROD)"

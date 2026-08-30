@@ -69,7 +69,7 @@ flowchart LR
 | [Day 19](day19-daemonsets-jobs-cronjobs/notes.md) | **DaemonSets, Jobs & CronJobs** | Theory + Lab | One-pod-per-node, batch & scheduled tasks |
 | [Day 20](day20-network-policies/notes.md) | **Network Policies** | Theory + Lab | Pod-to-pod firewalls, default-deny, CNI requirement |
 | [Day 21](day21-monitoring-logging/notes.md) | **Monitoring & Logging** | Theory + Lab | Prometheus, Grafana, alerting, log aggregation, probes; [probes deep dive](day21-monitoring-logging/probes.md) (liveness/readiness/startup); [debugging pods](day21-monitoring-logging/debugging-pods.md) (kubectl debug, ephemeral containers) |
-| [Day 22](day22-helm/notes.md) | **Helm** | Theory + Lab | Package manager for K8s; [demo](day22-helm/demo.md); [CRDs & Operators](day22-helm/crds-and-operators.md) |
+| [Day 22](day22-helm/notes.md) | **Helm** | Theory + Lab | Package manager for K8s; [demo](day22-helm/demo.md); [manual vs Helm](day22-helm/manual-vs-helm/README.md); [CRDs & Operators](day22-helm/crds-and-operators.md) |
 
 ---
 

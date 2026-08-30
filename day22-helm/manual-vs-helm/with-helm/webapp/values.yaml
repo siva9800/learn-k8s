@@ -1,0 +1,26 @@
+# Everything you might change lives HERE - no template edits needed.
+replicaCount: 2
+
+image:
+  repository: nginx
+  tag: "1.27"
+
+# Shown on the web page, so a value change is visible in the browser
+env: dev
+message: "Deployed WITH Helm"
+
+service:
+  type: ClusterIP        # no cloud LoadBalancer -> no ELB cost
+  port: 80
+
+# Toggle health probes on/off from values (impossible with raw YAML without editing)
+probes:
+  enabled: true
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

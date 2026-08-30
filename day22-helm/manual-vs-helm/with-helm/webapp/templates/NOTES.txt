@@ -1,0 +1,19 @@
+
+{{ .Release.Name }} installed - the "{{ .Values.message }}" webapp
+  Environment : {{ .Values.env }}
+  Replicas    : {{ .Values.replicaCount }}
+  Namespace   : {{ .Release.Namespace }}
+
+1. Check the pods:
+   kubectl get pods -l release={{ .Release.Name }} -n {{ .Release.Namespace }}
+
+2. Open it in your browser:
+   kubectl port-forward svc/{{ include "webapp.fullname" . }} 8080:{{ .Values.service.port }} -n {{ .Release.Namespace }}
+   # then visit http://localhost:8080
+
+3. Change something without editing any YAML:
+   helm upgrade {{ .Release.Name }} . -n {{ .Release.Namespace }} --set replicaCount=5
+
+4. Roll it back:
+   helm history {{ .Release.Name }} -n {{ .Release.Namespace }}
+   helm rollback {{ .Release.Name }} 1 -n {{ .Release.Namespace }}

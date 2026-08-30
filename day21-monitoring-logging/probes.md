@@ -30,6 +30,26 @@ flowchart LR
 
 ---
 
+## What Happens If You Omit a Probe (the defaults)
+
+Probes are **optional**. Before configuring them, understand what Kubernetes does when each one is **absent** - the defaults are not "safe," they are just permissive.
+
+| If you have NO... | Kubernetes assumes... | The consequence |
+|-------------------|----------------------|-----------------|
+| **livenessProbe** | The container is alive **as long as the process is running** | A **hung/deadlocked** process (running but serving nothing) is **never restarted** - it stays broken until you notice. Kubernetes only restarts on an actual process **exit/crash** (per `restartPolicy`). |
+| **readinessProbe** | The pod is **Ready the instant the container starts** | It is added to the Service and **receives traffic immediately** - before the app can serve. Users hit **half-booted pods** (errors/timeouts), and **rollouts do not wait**, so a bad version goes live at once. |
+| **startupProbe** | Liveness/readiness start running **right away** (after their `initialDelaySeconds`) | A **slow-booting** app can **fail liveness during boot and get killed** -> `CrashLoopBackOff` that never recovers. Your only fix without a startup probe is a large `initialDelaySeconds` (the clumsy old way). |
+
+### Walking through each "what if"
+
+- **No liveness probe:** fine for a simple app that either works or crashes outright (the crash itself triggers a restart). **Dangerous** for anything that can **deadlock, hang, or wedge a thread pool** while the process stays alive - Kubernetes sees "process running = healthy" and leaves it broken forever.
+- **No readiness probe:** the single most common cause of "**500s during every deploy**." Without it, a new pod is treated as ready at t=0, gets traffic before its cache/DB/warm-up is done, and the rollout replaces old pods while new ones cannot yet serve. **Almost every Service-backed workload should have one.**
+- **No startup probe:** usually fine for fast starters. But a JVM, a big cache load, or DB migrations can take longer than the liveness `failureThreshold x periodSeconds`, so liveness kills the app mid-boot and it never comes up. The startup probe exists precisely to give slow apps a boot grace period without making liveness sluggish forever.
+
+> **The asymmetry to remember:** omitting **readiness** is an **availability** bug (traffic to pods that cannot serve). Omitting **liveness** is a **recovery** bug (hung pods never self-heal). Omitting **startup** is a **boot** bug (slow apps get killed before they finish starting). None of the defaults protect you - they just say "assume healthy."
+
+---
+
 ## The Tuning Fields (this is where people go wrong)
 
 Every probe shares the same six fields. The defaults are aggressive, so know them:
@@ -296,6 +316,7 @@ kubectl get events --sort-by=.lastTimestamp | grep -i probe
 3. Your app takes up to 2 minutes to boot and keeps getting killed with `CrashLoopBackOff`. Which probe fixes this, and how do you size it?
 4. What is the difference in *action* between a failed liveness probe and a failed readiness probe?
 5. During a deploy you see brief "connection refused" errors. Which two settings (a probe behaviour + a lifecycle hook) fix this?
+6. A pod has **no probes at all**. What does Kubernetes assume about it, and which of the three omissions is the most dangerous for a Service-backed app?
 
 <details>
 <summary>Answers</summary>
@@ -305,6 +326,7 @@ kubectl get events --sort-by=.lastTimestamp | grep -i probe
 3. A **startupProbe** with `failureThreshold x periodSeconds` >= 120s (e.g. `failureThreshold: 30`, `periodSeconds: 5` = 150s). It holds off liveness until the app has booted.
 4. **Liveness failure restarts** the container; **readiness failure removes it from the Service** (no restart) until it passes again.
 5. **readiness** fails first on termination (so the pod leaves the Service) **plus** a `preStop` hook (e.g. `sleep 5`) to let endpoint removal propagate and in-flight requests drain before SIGTERM.
+6. Kubernetes assumes it is **healthy and Ready the moment the container starts** (defaults are permissive, not safe). For a Service-backed app the most dangerous omission is the **readiness** probe - traffic is sent to a pod that cannot serve yet, causing errors on every deploy.
 
 </details>
 

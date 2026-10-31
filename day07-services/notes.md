@@ -8,6 +8,7 @@
 - Understand how a Service finds Pods using **label selectors**
 - Tell apart `port`, `targetPort`, and `nodePort`
 - Write, apply, and inspect a Service with `kubectl`
+- Explain what really forwards Service traffic: the **EndpointSlice controller**, **EndpointSlices**, **kube-proxy** and the **kernel dataplane** (desired state vs programmed dataplane)
 
 ---
 
@@ -25,6 +26,8 @@ In Kubernetes:
 - **The front desk knowing who works there today** = the Service's **selector** matching Pod **labels**.
 
 > Pods are disposable; their IPs change on every restart. A **Service** is the permanent "phone number" that always reaches the right Pods.
+
+> **Careful with this analogy:** it describes *what* a Service gives you, not *how* it works. There is no front-desk process taking every call; the routing is done by rules in each node's kernel. See [Under the Hood](#under-the-hood-how-a-service-really-moves-packets) below.
 
 ---
 
@@ -357,6 +360,314 @@ So your app can connect to the backend using just `http://backend:80`
 
 ---
 
+## Under the Hood: How a Service Really Moves Packets
+
+The pizza-shop analogy at the top of this lesson describes **what a Service gives you**: one stable number. It is misleading about **how it works**. There is no "front desk" person in the middle taking every call. This section explains what really happens, and every output below is from a real cluster (Minikube, Kubernetes v1.35, October 2026).
+
+### A Service is not a program
+
+A Kubernetes Service is **not an active process** that receives a packet, looks up the Pods, and forwards the packet. A Service is mostly a **logical, virtual networking object**: a ClusterIP, a port, a selector and some policy, stored in the API server. There is no "Service process" anywhere doing this:
+
+```text
+packet arrives
+-> query the list of Pods
+-> choose a Pod
+-> forward the packet
+```
+
+That design would be too slow (an extra hop for every request) and would create a central bottleneck and a single point of failure.
+
+Instead, Kubernetes separates two things:
+
+- **Control plane: the desired state.** Objects that *describe* where traffic should go.
+- **Data plane: the programmed state.** Rules inside each node's Linux kernel that *actually move* the packets.
+
+### The control-plane side: who maintains the list of Pods
+
+```mermaid
+flowchart TD
+    D["Deployment / Pods<br/>labels: app=payment"] --> C
+    S["Service payment-service<br/>selector: app=payment"] --> C
+    C["EndpointSlice controller<br/>(inside kube-controller-manager)<br/>watches Services and Pods"] --> E["EndpointSlice<br/>payment-service backends:<br/>10.244.0.2:3000<br/>10.244.0.3:3000<br/>10.244.0.4:3000"]
+```
+
+A common misunderstanding is that "the Service updates its endpoints". It does not. The **EndpointSlice controller**, part of the control plane, watches Services and Pods. Whenever a matching Pod becomes ready, dies or is added, it updates the **EndpointSlice** objects for that Service.
+
+You can see this ownership on a real cluster:
+
+```bash
+kubectl create deployment payment --image=registry.k8s.io/gateway-api/echo-basic:v1.5.1 --replicas=3 --port=3000
+kubectl expose deployment payment --name=payment-service --port=80 --target-port=3000
+
+kubectl get svc payment-service
+# NAME              TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+# payment-service   ClusterIP   10.107.21.26   <none>        80/TCP    9s
+
+kubectl get endpointslices -l kubernetes.io/service-name=payment-service
+# NAME                    ADDRESSTYPE   PORTS   ENDPOINTS                          AGE
+# payment-service-8qgzp   IPv4          3000    10.244.0.2,10.244.0.4,10.244.0.3   9s
+
+# Who manages it? The labels say so:
+kubectl get endpointslice payment-service-8qgzp -o jsonpath='{.metadata.labels}'
+# {"app":"payment",
+#  "endpointslice.kubernetes.io/managed-by":"endpointslice-controller.k8s.io",
+#  "kubernetes.io/service-name":"payment-service"}
+
+# Each endpoint records its Pod and whether it is ready
+kubectl get endpointslice payment-service-8qgzp \
+  -o jsonpath='{range .endpoints[*]}{.addresses[0]} ready={.conditions.ready} pod={.targetRef.name}{"\n"}{end}'
+# 10.244.0.2 ready=true pod=payment-69c8f8ddd-9t8gx
+# 10.244.0.4 ready=true pod=payment-69c8f8ddd-xf976
+# 10.244.0.3 ready=true pod=payment-69c8f8ddd-nkjms
+```
+
+> **EndpointSlices replaced Endpoints.** The older `Endpoints` object still exists, but on Kubernetes 1.33 and later `kubectl get endpoints payment-service` prints:
+> `Warning: v1 Endpoints is deprecated in v1.33+; use discovery.k8s.io/v1 EndpointSlice`
+> EndpointSlices were created because one huge Endpoints object per Service did not scale: a Service with 5,000 Pods meant re-sending all 5,000 addresses to every node on every change. EndpointSlices split the list into chunks (100 endpoints each by default), so a change only re-sends one small slice.
+
+### The data-plane side: kube-proxy programs the kernel
+
+On **every node**, **kube-proxy** watches two things, **Services** and **EndpointSlices**, and turns that desired state into **Linux kernel networking rules** on its node.
+
+```mermaid
+flowchart LR
+    subgraph CP["Control plane (desired state)"]
+        SVC["Service<br/>ClusterIP 10.107.21.26:80"]
+        ES["EndpointSlice<br/>10.244.0.2 / .3 / .4 : 3000"]
+    end
+    subgraph Node["Every node"]
+        KP["kube-proxy<br/>(watches, then writes rules)"]
+        K["Linux kernel rules<br/>(iptables / nftables)<br/>10.107.21.26:80 -> one of 3 Pods"]
+    end
+    SVC -->|watch| KP
+    ES -->|watch| KP
+    KP -->|programs| K
+```
+
+Then the packet flow is:
+
+```text
+Application Pod
+     |
+     |  connects to 10.107.21.26:80      <- Service virtual IP (exists only as a rule)
+     v
+kernel dataplane rules on the SAME node  <- rewrite destination (DNAT)
+     |
+     v
+10.244.0.3:3000                          <- a real Pod IP
+     |
+     v
+destination Pod
+```
+
+The most important sentence in this section:
+
+> **The packet does not travel through the EndpointSlice object, and normally it does not travel through the kube-proxy process either.** EndpointSlice is just information. kube-proxy's job is to **watch Kubernetes networking state and program the node's dataplane**. Then Linux handles the packets.
+
+### A better analogy: the address book and the road signs
+
+```text
+EndpointSlice      = the address book (who lives where right now)
+kube-proxy         = the person who reads the address book and puts up road signs
+Service ClusterIP  = the destination name everybody knows ("Payment Street")
+Linux dataplane    = the actual roads the cars drive on
+```
+
+A car does not stop at the address book on every trip. It follows the road signs, which were put up in advance. If the address book changes, the sign-maker updates the signs, and **only then** do cars go to the new address.
+
+```mermaid
+flowchart LR
+    AB["Address book<br/>(EndpointSlice)"] -->|"read when it changes"| SM["Sign-maker<br/>(kube-proxy)"]
+    SM -->|"puts up signs in advance"| RS["Road signs<br/>(kernel rules)"]
+    CAR["Car<br/>(packet)"] -->|"follows signs only"| RS
+    RS --> H["House<br/>(Pod)"]
+    CAR -. "never visits" .-> AB
+```
+
+### See it for yourself: the actual kernel rules
+
+Minikube's kube-proxy runs in **iptables mode** (`kubectl logs -n kube-system -l k8s-app=kube-proxy` shows `"Using iptables Proxier"`). Look at the rules it wrote for `payment-service`:
+
+```bash
+minikube ssh -- "sudo iptables -t nat -S KUBE-SERVICES | grep payment"
+# -A KUBE-SERVICES -d 10.107.21.26/32 -p tcp -m comment --comment "default/payment-service cluster IP"
+#    -m tcp --dport 80 -j KUBE-SVC-7NWAR22K4SA3UAVO
+```
+
+"Any TCP packet to 10.107.21.26 port 80, jump to chain `KUBE-SVC-7NWAR22K4SA3UAVO`." Now look at that chain:
+
+```bash
+minikube ssh -- "sudo iptables -t nat -S KUBE-SVC-7NWAR22K4SA3UAVO"
+# -A KUBE-SVC-... ! -s 10.244.0.0/16 -d 10.107.21.26/32 ... -j KUBE-MARK-MASQ
+# -A KUBE-SVC-... -m comment --comment "default/payment-service -> 10.244.0.2:3000"
+#      -m statistic --mode random --probability 0.33333333349 -j KUBE-SEP-NZUO4VHJKRJPXTY7
+# -A KUBE-SVC-... -m comment --comment "default/payment-service -> 10.244.0.3:3000"
+#      -m statistic --mode random --probability 0.50000000000 -j KUBE-SEP-KAYF7SMKMPHA5RXA
+# -A KUBE-SVC-... -m comment --comment "default/payment-service -> 10.244.0.4:3000"
+#      -j KUBE-SEP-BHFD3BQ6OQ34RLOW
+```
+
+This is the "load balancer". It is just three rules with random probabilities:
+
+- Rule 1: jump to Pod 1 with probability **1/3**.
+- Otherwise rule 2: jump to Pod 2 with probability **1/2** of the remaining 2/3, which is also 1/3 overall.
+- Otherwise rule 3: Pod 3 gets everything left, again 1/3.
+
+```mermaid
+flowchart TD
+    P["New connection to<br/>10.107.21.26:80"] --> R1{"random < 0.333?"}
+    R1 -->|"yes (1/3)"| A["DNAT to 10.244.0.2:3000"]
+    R1 -->|no| R2{"random < 0.5?"}
+    R2 -->|"yes (1/2 of 2/3 = 1/3)"| B["DNAT to 10.244.0.3:3000"]
+    R2 -->|"no (1/3)"| C["DNAT to 10.244.0.4:3000"]
+```
+
+And each `KUBE-SEP` ("service endpoint") chain does the actual rewrite:
+
+```bash
+minikube ssh -- "sudo iptables -t nat -S KUBE-SEP-NZUO4VHJKRJPXTY7"
+# -A KUBE-SEP-NZUO4VHJKRJPXTY7 -s 10.244.0.2/32 ... -j KUBE-MARK-MASQ
+# -A KUBE-SEP-NZUO4VHJKRJPXTY7 -p tcp ... -j DNAT --to-destination 10.244.0.2:3000
+```
+
+**DNAT** (destination NAT) rewrites the packet's destination from the ClusterIP to the chosen Pod IP. Nothing listens on 10.107.21.26: the IP is not on any network interface, and there is no process for the Service. In our run, `ip addr | grep 10.107.21.26` and a process search on the node both found **0** matches.
+
+### Four real consequences you can prove
+
+These are exactly the things that confuse people in production and come up in interviews.
+
+**1. You cannot ping a ClusterIP.** The rules only match TCP port 80 (the Service's port and protocol). An ICMP ping matches nothing, and no interface owns the IP:
+
+```bash
+kubectl exec client -- ping -c 2 -W 2 10.107.21.26
+# 2 packets transmitted, 0 packets received, 100% packet loss
+```
+
+The Service is fine; `curl http://payment-service` works. Never debug a Service with ping.
+
+**2. Load balancing is per connection, not per request.** The random choice happens when a **new connection** is created; the kernel's connection tracking (conntrack) then keeps every packet of that connection on the same Pod.
+
+```bash
+# 6 separate connections
+for i in 1 2 3 4 5 6; do kubectl exec client -- curl -s http://payment-service | grep '"pod"'; done
+#  "pod": "payment-8f676b8d9-rdw62"
+#  "pod": "payment-8f676b8d9-p89gg"
+#  "pod": "payment-8f676b8d9-pdr5x"
+#  "pod": "payment-8f676b8d9-p89gg"
+#  "pod": "payment-8f676b8d9-pdr5x"
+#  "pod": "payment-8f676b8d9-p89gg"
+
+# 6 requests on ONE keep-alive connection (curl reuses the connection for several URLs)
+kubectl exec client -- sh -c 'curl -s http://payment-service/a http://payment-service/b \
+  http://payment-service/c http://payment-service/d http://payment-service/e http://payment-service/f' | grep '"pod"'
+#  "pod": "payment-8f676b8d9-rdw62"     <- all six on the same Pod
+#  "pod": "payment-8f676b8d9-rdw62"
+#  "pod": "payment-8f676b8d9-rdw62"
+#  "pod": "payment-8f676b8d9-rdw62"
+#  "pod": "payment-8f676b8d9-rdw62"
+#  "pod": "payment-8f676b8d9-rdw62"
+```
+
+**Real-world impact:** gRPC and HTTP/2 clients open **one long-lived connection** and send thousands of requests over it. Behind a plain ClusterIP Service, one Pod gets all the traffic while the others sit idle, and adding replicas does not help. The fixes are client-side load balancing (gRPC with a headless Service), or an L7 proxy that balances per request, such as a service mesh waypoint (Day 24) or a Gateway (Day 23).
+
+**3. kube-proxy is not in the packet path, so traffic survives without it.** We removed kube-proxy from the node (by giving its DaemonSet a nodeSelector that matches no node) and kept sending traffic:
+
+```bash
+kubectl -n kube-system get pods -l k8s-app=kube-proxy
+# No resources found in kube-system namespace.
+
+for i in $(seq 1 10); do kubectl exec client -- curl -s -m 2 -o /dev/null -w "%{http_code}\n" http://payment-service; done | sort | uniq -c
+#      10 200          <- still works: the rules are already in the kernel
+```
+
+**4. But without kube-proxy, the desired state and the dataplane drift apart.** With kube-proxy still gone, we scaled the Deployment from 3 Pods to 1:
+
+```bash
+kubectl scale deploy payment --replicas=1
+
+kubectl get endpointslice -l kubernetes.io/service-name=payment-service     # desired state
+# NAME                    ADDRESSTYPE   PORTS   ENDPOINTS    AGE
+# payment-service-8qgzp   IPv4          3000    10.244.0.7   119s          <- 1 Pod: correct
+
+minikube ssh -- "sudo iptables -t nat -S KUBE-SVC-7NWAR22K4SA3UAVO | grep -c KUBE-SEP"   # programmed state
+# 3                                                                          <- still 3 Pods: stale!
+
+for i in $(seq 1 12); do kubectl exec client -- curl -s -m 2 -o /dev/null -w "%{http_code}\n" http://payment-service; done | sort | uniq -c
+#       7 000          <- 7 of 12 connections sent to Pods that no longer exist (timeouts)
+#       5 200
+```
+
+The EndpointSlice controller did its job; the address book was right. But nobody updated the road signs, so two-thirds of new connections drove to houses that had been demolished. When kube-proxy came back, it re-synced the rules within seconds:
+
+```bash
+minikube ssh -- "sudo iptables -t nat -S KUBE-SVC-7NWAR22K4SA3UAVO | grep -c KUBE-SEP"
+# 1
+#      12 200          <- all 12 requests succeed again
+```
+
+```mermaid
+sequenceDiagram
+    participant Ctl as EndpointSlice controller
+    participant ES as EndpointSlice
+    participant KP as kube-proxy
+    participant K as Kernel rules
+    Note over KP: kube-proxy removed
+    Ctl->>ES: scale 3 to 1: update to 1 endpoint
+    ES--xKP: nobody is watching
+    Note over K: still 3 endpoints (stale)<br/>7 of 12 connections time out
+    Note over KP: kube-proxy restored
+    ES->>KP: watch: 1 endpoint
+    KP->>K: rewrite rules: 1 endpoint
+    Note over K: 12 of 12 succeed
+```
+
+This is a real production failure mode. If kube-proxy is crash-looping or stuck on one node (for example after a bad upgrade, or a node under memory pressure), Services **keep working on that node with stale rules** until Pods move, and then you see intermittent timeouts **only on that node**. The fix starts with `kubectl -n kube-system get pods -l k8s-app=kube-proxy -o wide`.
+
+### Why not make the Service do the forwarding?
+
+If every request went through a central "Service process":
+
+```text
+request -> Service process -> look up backend -> choose Pod -> forward packet
+```
+
+you would add an extra network hop, extra latency, a component that must scale with all cluster traffic, and another failure point. Kubernetes instead **pushes the backend information down to every node in advance**, so forwarding happens in the kernel on the node where the traffic starts:
+
+```text
+Service information + EndpointSlice information
+                    |
+     already converted into dataplane rules on every node
+                    |
+          packet forwarding happens locally and quickly
+```
+
+### kube-proxy modes and replacements (2026)
+
+| Dataplane | How it forwards | Status |
+|---|---|---|
+| **iptables** | Chains of NAT rules, as shown above; rule count grows with Services x endpoints | Default on Linux; what Minikube uses |
+| **nftables** | The modern Linux packet framework; faster updates and lookups at large scale | Stable (GA) since Kubernetes v1.33; the recommended choice for new large clusters |
+| **IPVS** | Linux kernel load balancer with hash tables | **Deprecated in v1.35**; plan to migrate to nftables |
+| **eBPF, no kube-proxy** (Cilium, Calico eBPF) | eBPF programs in the kernel replace kube-proxy entirely | Common on large or performance-sensitive clusters, and on several managed offerings |
+
+The **design is the same in every row**: a component watches Services and EndpointSlices and programs the kernel; packets never pass through an API object. Only the mechanism of the "road signs" changes.
+
+### The full picture, in one diagram
+
+```mermaid
+flowchart TD
+    A["Service selector + Pods (labels)"] --> B["EndpointSlice controller<br/>(control plane)"]
+    B --> C["EndpointSlices<br/>(desired state: which Pod IPs are ready)"]
+    C --> D["kube-proxy on every node<br/>watches Services + EndpointSlices"]
+    D --> E["Node dataplane<br/>iptables / nftables / eBPF rules"]
+    F["Client Pod sends to<br/>ClusterIP:port"] --> E
+    E -->|"DNAT, per connection"| G["Chosen Pod IP:targetPort"]
+```
+
+> **Desired state vs programmed dataplane** is one of the most important ideas in Kubernetes networking. When a Service "does not work", ask two separate questions: (1) Is the desired state right? Check the EndpointSlice has the expected ready Pod IPs. (2) Is the dataplane programmed? Check kube-proxy (or your eBPF agent) is healthy on the node where the client runs.
+
+---
+
 ## Useful Commands
 
 ```bash
@@ -366,8 +677,11 @@ kubectl get services   # or: kubectl get svc
 # Describe a service (shows endpoints/pods)
 kubectl describe svc backend
 
-# See endpoints (actual pod IPs)
-kubectl get endpoints backend
+# See the pod IPs behind the Service (EndpointSlices; 'kubectl get endpoints' is deprecated in 1.33+)
+kubectl get endpointslices -l kubernetes.io/service-name=backend
+
+# Is kube-proxy healthy on every node? (it programs the Service rules)
+kubectl -n kube-system get pods -l k8s-app=kube-proxy -o wide
 
 # Delete a service
 kubectl delete svc backend
@@ -382,6 +696,9 @@ kubectl delete svc backend
 3. **Expecting ClusterIP to work from your laptop.** ClusterIP is **internal only** - reach it via NodePort, LoadBalancer, or `kubectl port-forward`.
 4. **Picking a `nodePort` outside 30000 - 32767.** Values outside this range are rejected.
 5. **Using `type: LoadBalancer` on a local cluster** (Minikube/kind) and expecting a public IP - it stays `<pending>` without `minikube tunnel` or a cloud provider.
+6. **Pinging a ClusterIP to "test" a Service.** A ClusterIP is a rule, not a host; ping always fails. Test with `curl` or `nc` on the Service port.
+7. **Expecting a Service to spread gRPC / HTTP/2 traffic.** Balancing happens per connection; one long-lived connection sticks to one Pod. Use client-side balancing with a headless Service, or an L7 proxy.
+8. **Thinking the Service (or kube-proxy) forwards packets.** The EndpointSlice controller maintains the backend list, kube-proxy programs the kernel, and the kernel forwards. If one node has a broken kube-proxy, that node keeps stale rules.
 
 ---
 
@@ -392,6 +709,11 @@ kubectl delete svc backend
 3. What is the default Service type, and who can reach it?
 4. What's the difference between `port` and `targetPort`?
 5. Your Service shows no endpoints. What's the likely cause, and which command confirms it?
+6. Which component creates and updates EndpointSlices: the Service, kube-proxy, or the EndpointSlice controller?
+7. Why does `ping <ClusterIP>` fail even when the Service works?
+8. In our lab, kube-proxy was removed and the Deployment scaled from 3 Pods to 1. Why did 7 of 12 requests time out?
+
+**Answers to 6 to 8:** (6) The EndpointSlice controller in the control plane. (7) The ClusterIP is not on any interface; kube-proxy only wrote rules for the Service's TCP port, so ICMP matches nothing. (8) The EndpointSlice was updated to 1 Pod, but without kube-proxy nobody rewrote the kernel rules, which still sent two-thirds of new connections to deleted Pod IPs.
 
 ---
 
@@ -412,6 +734,8 @@ Next up → [Day 08 - Services Demo](../day08-services-demo/notes.md)
 5. Services find pods using **label selectors**
 6. Pods can reach services using **DNS names** (e.g., `http://backend`)
 7. `port` = service port, `targetPort` = container port, `nodePort` = external port
+8. A Service is **not a process**: EndpointSlice controller -> EndpointSlices -> kube-proxy -> kernel rules -> Pod. Packets never pass through the EndpointSlice object or (normally) kube-proxy
+9. Service load balancing is **per connection**, not per request
 
 ---
 
@@ -419,9 +743,11 @@ Next up → [Day 08 - Services Demo](../day08-services-demo/notes.md)
 
 1. Create a ClusterIP service and test it from within the cluster
 2. Create a NodePort service and access nginx from your browser
-3. Run `kubectl get endpoints` and compare IPs with `kubectl get pods -o wide`
+3. Run `kubectl get endpointslices -l kubernetes.io/service-name=<svc>` and compare IPs with `kubectl get pods -o wide`
 4. Delete a pod and check: does the service still work? (Yes! Self-healing)
 5. Scale your deployment to 5 replicas and check endpoints again
+6. Run `minikube ssh -- "sudo iptables -t nat -S KUBE-SERVICES | grep <svc>"`, follow the `KUBE-SVC-...` chain, and explain the `--probability` values for 5 replicas
+7. Prove per-connection balancing: compare 6 separate `curl` calls with one `curl` given 6 URLs (it reuses one connection)
 
 ---
 

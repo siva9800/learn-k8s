@@ -139,9 +139,10 @@ Each worker node has 3 main components.
 
 ### 2. Kube-Proxy
 
-- **What:** Handles networking on each node.
-- **Why:** When a request comes for your app, kube-proxy routes it to the right pod.
-- **Analogy:** The **internal phone system** - routes calls to the correct department.
+- **What:** Handles Service networking on each node.
+- **Why:** It watches Services and their EndpointSlices and writes **kernel networking rules** (iptables, nftables) on its node, so traffic sent to a Service reaches a healthy pod. The packets themselves are forwarded by the Linux kernel, not by kube-proxy.
+- **Analogy:** The person who **puts up the road signs** - reads the address book of which pods are where, and updates the signs; cars (packets) just follow the signs.
+- **Deep dive:** [Day 07 - Under the Hood: How a Service Really Moves Packets](../day07-services/notes.md#under-the-hood-how-a-service-really-moves-packets)
 
 ### 3. Container Runtime
 

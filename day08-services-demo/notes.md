@@ -509,6 +509,8 @@ kubectl logs <pod-name>          # is the app actually listening?
 
 > Golden habit: **always check `kubectl get endpoints` first.** An empty endpoints list almost always means a selector/label mismatch.
 
+> **Kubernetes 1.33+:** `kubectl get endpoints` still works but prints a deprecation warning. The modern equivalent is `kubectl get endpointslices -l kubernetes.io/service-name=<svc>`. Why both exist, and what actually forwards the traffic, is explained in [Day 07 - Under the Hood](../day07-services/notes.md#under-the-hood-how-a-service-really-moves-packets).
+
 ---
 
 ## Common Mistakes

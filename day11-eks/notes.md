@@ -4,6 +4,8 @@
 
 > **Going deeper - full production EKS build:** this page is the overview. For a complete, production-shaped walkthrough (manual setup → config trade-offs → 2026 best practices → working Terraform), see **[eks-cluster-creation/](eks-cluster-creation/README.md)**.
 
+> **Practise for free first:** a real EKS cluster costs money even when idle. **[Local EKS with Floci](local-eks-with-floci.md)** shows how to run the same `aws eks` workflow (cluster, kubectl, ECR, IRSA, Terraform) on your laptop with no AWS account, and exactly where it differs from real EKS.
+
 ## Learning Objectives
 
 By the end of this lesson you will be able to:

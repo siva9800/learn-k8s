@@ -58,7 +58,7 @@ flowchart LR
 | [Day 08](day08-services-demo/notes.md) | **Services Demo** | Hands-On | All service types, DNS discovery, load balancing |
 | [Day 09](day09-namespaces/notes.md) | **Namespaces** | Theory + Lab | Organizing & isolating resources |
 | [Day 10](day10-configmaps-secrets/notes.md) | **ConfigMaps & Secrets** | Theory + Lab | Externalizing config; managing sensitive data; [production secrets](day10-configmaps-secrets/production-secrets.md) (ESO, Vault, Sealed Secrets, SOPS) |
-| [Day 11](day11-eks/notes.md) | **EKS (Managed K8s on AWS)** | Cloud | Managed control plane, [node groups](day11-eks/managed-nodegroups/notes.md); full [cluster-creation guide](day11-eks/eks-cluster-creation/README.md) (manual · deep-dive · best-practices · Terraform) |
+| [Day 11](day11-eks/notes.md) | **EKS (Managed K8s on AWS)** | Cloud | Managed control plane, [node groups](day11-eks/managed-nodegroups/notes.md); full [cluster-creation guide](day11-eks/eks-cluster-creation/README.md) (manual · deep-dive · best-practices · Terraform); [practise EKS free with Floci](day11-eks/local-eks-with-floci.md) (local AWS emulator) |
 | [Day 12](day12-volumes/notes.md) | **Volumes & Storage** | Theory | PV, PVC, StorageClass; [AWS](day12-volumes/aws-volumes/notes.md) & [NFS](day12-volumes/nfs-volumes/notes.md) |
 | [Day 13](day13-volumes-demo/notes.md) | **Volumes Demo** | Hands-On | Data survives pod deletion; [EKS demo](day13-volumes-demo/eks-demo.md) |
 | [Day 14](day14-statefulsets/notes.md) | **StatefulSets** | Theory | Running stateful apps like databases |
@@ -70,6 +70,9 @@ flowchart LR
 | [Day 20](day20-network-policies/notes.md) | **Network Policies** | Theory + Lab | Pod-to-pod firewalls, default-deny, CNI requirement |
 | [Day 21](day21-monitoring-logging/notes.md) | **Monitoring & Logging** | Theory + Lab | Prometheus, Grafana, alerting, log aggregation, probes; [probes deep dive](day21-monitoring-logging/probes.md) (liveness/readiness/startup); [debugging pods](day21-monitoring-logging/debugging-pods.md) (kubectl debug, ephemeral containers) |
 | [Day 22](day22-helm/notes.md) | **Helm** | Theory + Lab | Package manager for K8s; [demo](day22-helm/demo.md); [manual vs Helm](day22-helm/manual-vs-helm/README.md); [CRDs & Operators](day22-helm/crds-and-operators.md) |
+| [Day 23](day23-gateway-api/notes.md) | **Gateway API** | Theory + Lab | The successor to Ingress (ingress-nginx retired March 2026); GatewayClass, Gateway, HTTPRoute; canary and header routing; HTTPS redirect; ReferenceGrant; migrating from Ingress; EKS |
+| [Day 24](day24-zero-trust-service-mesh/notes.md) | **Zero-Trust Networking & Service Mesh** | Theory + Lab | What a mesh solves (mTLS, workload identity, L4/L7 authorization) and when you do not need one; Istio ambient (ztunnel, waypoints), Cilium WireGuard, Linkerd; lab: encrypt, authorize, canary inside the cluster |
+| [Day 25](day25-policy-supply-chain-runtime/notes.md) | **Policy, Supply Chain & Runtime Security** | Theory + Lab | ValidatingAdmissionPolicy, Kyverno (validate, mutate, generate, verify images); SBOMs, Trivy, cosign signing; Falco and Tetragon runtime detection and enforcement |
 
 ---
 
@@ -109,9 +112,10 @@ By the end you'll be able to:
 - Explain what Kubernetes does and why it exists
 - Read and write Kubernetes YAML manifests
 - Deploy, scale, update, and roll back applications
-- Expose apps with Services and Ingress
+- Expose apps with Services, Ingress and Gateway API
 - Manage config, secrets, storage, and stateful apps
-- Package apps with Helm and run on managed K8s (EKS)
+- Package apps with Helm and run on managed K8s (EKS), practising for free with Floci
+- Secure a cluster in depth: zero-trust networking, policy as code, signed images and runtime detection
 
 ---
 

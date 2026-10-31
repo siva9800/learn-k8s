@@ -6,6 +6,8 @@
 >
 > **For production demos on EKS:** See [Ingress Demo (EKS / Production - AWS ALB)](eks-demo.md)
 
+> **Important (2026 update):** the community **ingress-nginx** controller used in this demo was **retired in March 2026** and no longer receives security patches. The Ingress API itself still works, and Minikube's `ingress` addon is still fine for learning it, because you will meet Ingress in many existing clusters. For anything new, use **Gateway API**: see [Day 23 - Gateway API](../day23-gateway-api/notes.md), which rebuilds these demos and shows how to migrate.
+
 In this hands-on session, we'll set up an nginx Ingress Controller on Minikube and walk through path-based routing, host-based routing, and TLS setup.
 
 ## Learning Objectives

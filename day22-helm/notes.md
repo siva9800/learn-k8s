@@ -475,7 +475,7 @@ These are charts you will use in almost every production cluster:
 ├─────────────────────┬────────────────────────────────────────┤
 │ Chart               │ Purpose                                │
 ├─────────────────────┼────────────────────────────────────────┤
-│ ingress-nginx       │ NGINX Ingress Controller               │
+│ gateway-helm        │ Envoy Gateway (Gateway API, Day 23)    │
 │ cert-manager        │ Automatic TLS certificates (Let's      │
 │                     │ Encrypt)                                │
 │ prometheus          │ Monitoring & alerting                   │
@@ -491,9 +491,11 @@ These are charts you will use in almost every production cluster:
 ```
 
 ```bash
-# Example: Install the NGINX Ingress Controller
-helm install ingress-nginx ingress-nginx/ingress-nginx \
-  --namespace ingress-nginx \
+# Example: Install Envoy Gateway (a Gateway API implementation, see Day 23)
+# Charts can also come from OCI registries - no 'helm repo add' needed
+helm install eg oci://docker.io/envoyproxy/gateway-helm \
+  --version v1.9.3 \
+  --namespace envoy-gateway-system \
   --create-namespace
 
 # Example: Install cert-manager
@@ -532,7 +534,7 @@ helm install cert-manager jetstack/cert-manager \
 │                                                              │
 │  8. Use helm lint to validate your charts                    │
 │                                                              │
-│  9. Popular charts: ingress-nginx, cert-manager, prometheus  │
+│  9. Popular charts: envoy-gateway, cert-manager, prometheus  │
 │                                                              │
 │ 10. One chart + different values files = multiple envs       │
 └─────────────────────────────────────────────────────────────┘
@@ -583,4 +585,4 @@ helm install cert-manager jetstack/cert-manager \
 
 > **Hands-On Demo:** [Helm Demo - Build, Deploy, Upgrade, Rollback](demo.md)
 
-**Previous:** [<-- Day 19 - DaemonSets, Jobs & CronJobs](../day19-daemonsets-jobs-cronjobs/notes.md) | **Next:** [Kubernetes Module README -->](../README.md)
+**Previous:** [<-- Day 19 - DaemonSets, Jobs & CronJobs](../day19-daemonsets-jobs-cronjobs/notes.md) | **Next:** [Day 23 - Gateway API -->](../day23-gateway-api/notes.md)
